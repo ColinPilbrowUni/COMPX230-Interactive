@@ -1,0 +1,35 @@
+<li class="checklist-dropdown">
+    <div class="checklist">
+        @foreach (var step in Steps)
+        {
+            var statusClass = GetStatusClass(step.Status);
+
+            <div class="checklist-item @statusClass">
+                <div class="checklist-indicator @statusClass">
+                    @if (step.Status == ChecklistStepStatus.Complete)
+                    {
+                        <span class="checkmark">✓</span>
+                    }
+                </div>
+                @if (step.Status == ChecklistStepStatus.Current || step.Status == ChecklistStepStatus.Complete)
+                {
+                    <span class="checklist-label"><strong>@step.Label</strong></span>
+                }
+                else
+                {
+                    <span class="checklist-label">@step.Label</span>
+                }
+            </div>
+        }
+    </div>
+</li>
+
+@code {
+    [Parameter]
+    public IReadOnlyList<ChecklistStep> Steps { get; set; } = [];
+
+    private static string GetStatusClass(ChecklistStepStatus status)
+    {
+        return status.ToString().ToLowerInvariant();
+    }
+}

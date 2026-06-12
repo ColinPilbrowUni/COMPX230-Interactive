@@ -7,13 +7,14 @@
     <div class="collapse collapse-horizontal show" id="levelSelect">
         <ul class="nav flex-column nav-pills">
             @* Sandbox - Home Page - position in list as needed *@
-            <LevelLink href="." name="Sandbox"/>
+            <LevelNavItem href="." name="Sandbox" Steps="@NoSteps" />
 
             @* Example levels *@
-            <LevelLink href="levelIntro" name="Introduction"/>
-            <LevelLink href="levelOne" name="#1"/>
-            <LevelLink href="levelTwo" name="#2"/>
-            <LevelLink href="levelBranching" name="Branching"/>
+            <LevelNavItem href="levelIntro" name="Introduction" Steps="@NoSteps" />
+            <LevelNavItem href="levelOne" name="#1" Steps="@NoSteps" />
+            <LevelNavItem href="levelTwo" name="#2" Steps="@NoSteps" />
+            <LevelNavItem href="levelBranching" name="Branching" Steps="@NoSteps" />
+            <LevelNavItem href="levelFour" name="#4" Steps="@LevelFourSteps" />
 
             <button class="btn btn-danger float-end my-2 ms-4" @onclick="ResetLevels" data-bs-toggle="modal" data-bs-target="#deleteModal">
                 Reset Level Progress
@@ -23,6 +24,14 @@
 </div>
 
 @code {
+    private static readonly IReadOnlyList<ChecklistStep> NoSteps = [];
+
+    // Example checklist steps for Level Four - to be updated with real objectives and steps when ready
+    private static readonly IReadOnlyList<ChecklistStep> LevelFourSteps =
+    [
+        new ChecklistStep("Shifting", ChecklistStepStatus.Current),
+        new ChecklistStep("Masking", ChecklistStepStatus.Incomplete)
+    ];
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -39,3 +48,77 @@
         JSRuntime.InvokeVoidAsync("resetLevels");
     }
 }
+
+<style>
+.checklist-dropdown {
+    padding: 0.5rem 0;
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.checklist {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+}
+
+.checklist-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    transition: background-color 0.2s;
+}
+
+.checklist-item.incomplete {
+    color: var(--bs-body-color);
+}
+
+.checklist-indicator {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.checklist-indicator.complete {
+    background-color: #28a745;
+    border: 2px solid #28a745;
+}
+
+.checklist-indicator.complete .checkmark {
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+    line-height: 1;
+}
+
+.checklist-indicator.current {
+    background-color: #6c757d;
+    border: 2px solid #6c757d;
+}
+
+.checklist-indicator.incomplete {
+    background-color: transparent;
+    border: 2px solid var(--bs-secondary);
+    opacity: 0.6;
+}
+
+.checklist-item.current {
+    background-color: rgba(108, 117, 125, 0.1);
+    cursor: pointer;
+}
+
+.checklist-item.complete {
+    cursor: pointer;
+}
+
+.checklist-label {
+    font-size: 0.95rem;
+}
+</style>

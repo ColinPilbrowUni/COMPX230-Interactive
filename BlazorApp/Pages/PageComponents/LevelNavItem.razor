@@ -1,0 +1,32 @@
+@inject NavigationManager NavManager
+
+<LevelLink href="@href" name="@name" />
+
+@if (IsSelectedLevel() && Steps.Count > 0)
+{
+    <LevelChecklistDropdown Steps="@Steps" />
+}
+
+@code {
+    [Parameter]
+    required public string href { get; set; }
+
+    [Parameter]
+    required public string name { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<ChecklistStep> Steps { get; set; } = [];
+
+    private bool IsSelectedLevel()
+    {
+        var uri = new Uri(NavManager.Uri);
+        var currentPath = uri.AbsolutePath.Split('/').Last();
+
+        if (href == ".")
+        {
+            return string.IsNullOrEmpty(currentPath);
+        }
+
+        return string.Equals(currentPath, href, StringComparison.OrdinalIgnoreCase);
+    }
+}
