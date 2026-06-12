@@ -1,4 +1,6 @@
 @inject IJSRuntime JSRuntime
+@inject ChecklistStateStore ChecklistState
+@implements IDisposable
 
 <div class="col-auto">
     <button class="btn btn-primary my-2" type="button" data-bs-toggle="collapse" data-bs-target="#levelSelect" aria-expanded="true" aria-controls="levelSelect">
@@ -14,7 +16,7 @@
             <LevelNavItem href="levelOne" name="#1" Steps="@NoSteps" />
             <LevelNavItem href="levelTwo" name="#2" Steps="@NoSteps" />
             <LevelNavItem href="levelBranching" name="Branching" Steps="@NoSteps" />
-            <LevelNavItem href="levelFour" name="#4" Steps="@LevelFourSteps" />
+            <LevelNavItem href="levelFour" name="#4" Steps='@GetLevelSteps("levelFour")' />
 
             <button class="btn btn-danger float-end my-2 ms-4" @onclick="ResetLevels" data-bs-toggle="modal" data-bs-target="#deleteModal">
                 Reset Level Progress
@@ -26,12 +28,10 @@
 @code {
     private static readonly IReadOnlyList<ChecklistStep> NoSteps = [];
 
-    // Example checklist steps for Level Four - to be updated with real objectives and steps when ready
-    private static readonly IReadOnlyList<ChecklistStep> LevelFourSteps =
-    [
-        new ChecklistStep("Shifting", ChecklistStepStatus.Current),
-        new ChecklistStep("Masking", ChecklistStepStatus.Incomplete)
-    ];
+    protected override void OnInitialized()
+    {
+        ChecklistState.StateChanged += HandleChecklistStateChanged;
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -43,9 +43,30 @@
         }
     }
 
+    private IReadOnlyList<ChecklistStep> GetLevelSteps(string levelId)
+    {
+        if (ChecklistState.TryGetSteps(levelId, out IReadOnlyList<ChecklistStep>? steps))
+        {
+            return steps;
+        }
+
+        return NoSteps;
+    }
+
+    private void HandleChecklistStateChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        ChecklistState.StateChanged -= HandleChecklistStateChanged;
+    }
+
     public void ResetLevels()
     {
-        JSRuntime.InvokeVoidAsync("resetLevels");
+        _ = JSRuntime.InvokeVoidAsync("resetLevels");
+        ChecklistState.ResetToDefaults();
     }
 }
 
@@ -111,11 +132,6 @@
 
 .checklist-item.current {
     background-color: rgba(108, 117, 125, 0.1);
-    cursor: pointer;
-}
-
-.checklist-item.complete {
-    cursor: pointer;
 }
 
 .checklist-label {

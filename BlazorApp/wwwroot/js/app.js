@@ -224,6 +224,12 @@ window.getProgress = (type) =>
     return Number(localStorage.getItem(id)) || 0;
 }
 
+window.getLevelProgress = (levelID, type) =>
+{
+    id = levelID + type;
+    return Number(localStorage.getItem(id)) || 0;
+}
+
 var popover;
 
 window.triggerPopover = (error) =>

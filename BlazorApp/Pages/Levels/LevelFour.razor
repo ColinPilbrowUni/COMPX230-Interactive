@@ -2,16 +2,18 @@
 @using RexSimulator.Hardware
 @using System.Text.Json
 @inject IJSRuntime JSRuntime
+@inject ChecklistStateStore ChecklistState
 
-<Level @ref="levelComponent" Title="#4" BoardChanged="CheckBoard" UIComponents="@Components" Toolbox="@toolbox" WSIMInstructions="@Instructions" MainInstructions=null startingWorkspace="@startingWorkspace" maxInstances="@maxInstances" />
+<Level @ref="levelComponent" Title="#4" BoardChanged="CheckBoard" UIComponents="@Components" Toolbox="@CurrentToolbox" WSIMInstructions="@Instructions" MainInstructions=null startingWorkspace="@CurrentStartingWorkspace" maxInstances="@maxInstances" />
 
 @code {
     public Level? levelComponent;
     public LevelComponents lc = new LevelComponents();
     required public WSIM WSIM;
     required public RexBoard board;
+    private LevelFourPhase phase = LevelFourPhase.Shifting;
     public UIComponents Components = new UIComponents(Blockly: true, Code: true, SSDs: true, Switches: true, LEDs: true, GPRegisters: true, ParallelRegisters: true);
-    public Toolbox toolbox = new Toolbox
+    public Toolbox shiftingToolbox = new Toolbox
     {
         contents = new List<Category>() {
             new Category {
@@ -52,6 +54,46 @@
         }
     };
 
+    public Toolbox maskingToolbox = new Toolbox
+    {
+        contents = new List<Category>() {
+            new Category {
+                name = "Sections",
+                categorystyle = "sectionCategory",
+                contents = new List<Block>() {
+                    new Block { type = "textHead" },
+                    new Block { type = "global" }
+                }
+            },
+            new Category {
+                name = "Branch",
+                categorystyle = "branchCategory",
+                contents = new List<Block>() {
+                    new Block { type = "label" },
+                    new Block { type = "jumpRegister" },
+                    new Block { type = "jump" }
+                }
+            },
+            new Category {
+                name = "Memory",
+                categorystyle = "memoryCategory",
+                contents = new List<Block>() {
+                    new Block { type = "loadWord" }
+                }
+            },
+            new Category {
+                name = "Logic",
+                categorystyle = "logicCategory",
+                contents = new List<Block>() {
+                    new Block { type = "bitwiseImmediate" },
+                    new Block { type = "shiftImmediate" }
+                }
+            }
+        }
+    };
+
+    public Toolbox CurrentToolbox => phase == LevelFourPhase.Shifting ? shiftingToolbox : maskingToolbox;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -63,7 +105,13 @@
             }
 
             lc.SetJSRuntime(JSRuntime);
-            await lc.getProgress();
+            lc.Section = await JSRuntime.InvokeAsync<int>("getProgress", "Section");
+
+            int savedPhase = await JSRuntime.InvokeAsync<int>("getProgress", "Phase");
+            phase = savedPhase == 1 ? LevelFourPhase.Masking : LevelFourPhase.Shifting;
+
+            SyncChecklistState();
+            await ApplySectionConfig();
             CheckBoard();
             StateHasChanged();
         }
@@ -71,6 +119,8 @@
 
     public bool stepOne = false;
     public bool stepTwo = false;
+    public bool maskingStepOne = false;
+    public bool maskingStepTwo = false;
 
     public void CheckBoard()
     {
@@ -80,52 +130,173 @@
         }
 
         uint switchValue = board.Parallel.Switches;
-        bool regOneMatchesSwitches = WSIM.Verify(new BoardCheck(WRAMPComponents.GPRegisters, switchValue, 1));
-        bool regTwoIsDoubleSwitches = WSIM.Verify(new BoardCheck(WRAMPComponents.GPRegisters, switchValue * 2, 2));
 
-        // Require a non-zero switch setting so the objective does not auto-complete at reset state.
-        stepOne = switchValue != 0 && regOneMatchesSwitches;
-        stepTwo = switchValue != 0 && stepOne && regTwoIsDoubleSwitches;
-
-        if (stepOne && lc.Section == 0)
+        if (phase == LevelFourPhase.Shifting)
         {
-            lc.Section = 1;
+            bool regOneMatchesSwitches = WSIM.Verify(new BoardCheck(WRAMPComponents.GPRegisters, switchValue, 1));
+            bool regTwoIsDoubleSwitches = WSIM.Verify(new BoardCheck(WRAMPComponents.GPRegisters, switchValue * 2, 2));
+
+            // Require a non-zero switch setting so the objective does not auto-complete at reset state.
+            stepOne = switchValue != 0 && regOneMatchesSwitches;
+            stepTwo = switchValue != 0 && stepOne && regTwoIsDoubleSwitches;
+
+            if (stepOne && lc.Section == 0)
+            {
+                lc.Section = 1;
+            }
+            if (stepTwo && lc.Section == 1)
+            {
+                lc.Section = 2;
+            }
+
+            SyncChecklistState();
+
+            lc.CheckObjective(stepOne, "checkmarkOne");
+            lc.CheckObjective(stepTwo, "checkmarkTwo");
         }
-        if (stepTwo && lc.Section == 1)
+        else
         {
-            lc.Section = 2;
-            lc.LevelCompleted();
+            uint lowerByte = switchValue & 0xFF;
+            uint upperByte = (switchValue >> 8) & 0xFF;
+
+            bool regThreeLowerByte = WSIM.Verify(new BoardCheck(WRAMPComponents.GPRegisters, lowerByte, 3));
+            bool regFourUpperByte = WSIM.Verify(new BoardCheck(WRAMPComponents.GPRegisters, upperByte, 4));
+
+            // Require at least one switch in the upper byte to ensure masking work is visible.
+            maskingStepOne = (switchValue & 0xFF00) != 0 && regThreeLowerByte;
+            maskingStepTwo = maskingStepOne && regFourUpperByte;
+
+            if (maskingStepOne && lc.Section == 0)
+            {
+                lc.Section = 1;
+            }
+            if (maskingStepTwo && lc.Section == 1)
+            {
+                lc.Section = 2;
+                lc.LevelCompleted();
+            }
+
+            SyncChecklistState();
+
+            lc.CheckObjective(maskingStepOne, "checkmarkThree");
+            lc.CheckObjective(maskingStepTwo, "checkmarkFour");
         }
 
-        lc.CheckObjective(stepOne, "checkmarkOne");
-        lc.CheckObjective(stepTwo, "checkmarkTwo");
         StateHasChanged();
+    }
+
+    public async Task NextSection()
+    {
+        if (phase != LevelFourPhase.Shifting || lc.Section < 2)
+        {
+            return;
+        }
+
+        phase = LevelFourPhase.Masking;
+        lc.Section = 0;
+        _ = JSRuntime.InvokeVoidAsync("storeProgress", "Phase", (int)phase);
+
+        stepOne = false;
+        stepTwo = false;
+        maskingStepOne = false;
+        maskingStepTwo = false;
+
+        ChecklistState.Set("levelFour", "Shifting", ChecklistStepStatus.Complete);
+        ChecklistState.Set("levelFour", "Masking", ChecklistStepStatus.Current);
+        lc.UncheckAllObjectives();
+        await ApplySectionConfig();
+        CheckBoard();
+        StateHasChanged();
+    }
+
+    public async Task ApplySectionConfig()
+    {
+        if (phase == LevelFourPhase.Shifting)
+        {
+            await lc.UpdateToolbox(shiftingToolbox);
+            await JSRuntime.InvokeVoidAsync("loadWorkspace", shiftingStartingWorkspace);
+            return;
+        }
+
+        await lc.UpdateToolbox(maskingToolbox);
+        await JSRuntime.InvokeVoidAsync("loadWorkspace", maskingStartingWorkspace);
     }
 
     public RenderFragment Instructions =>
     @<div>
-        <section>
-            <h2>Step One <label class="inputCheckmark" id="checkmarkOne"><i class="bi bi-check-lg"></i></label></h2>
-            <p>First task: load the current switch value into register <code>$1</code>.</p>
-            <p>Tip: Make sure at least one switch is on, then run or step your code and confirm <code>$1</code> updates.</p>
+        @if (phase == LevelFourPhase.Shifting)
+        {
+            <section>
+                <h2>Shifting</h2>
+                <h3>Step One <label class="inputCheckmark" id="checkmarkOne"><i class="bi bi-check-lg"></i></label></h3>
+                <p>First task: load the current switch value into register <code>$1</code>.</p>
+                <p>Tip: Make sure at least one switch is on, then run or step your code and confirm <code>$1</code> updates.</p>
 
-            @if (lc.Section >= 1)
-            {
-                <h2>Step Two <label class="inputCheckmark" id="checkmarkTwo"><i class="bi bi-check-lg"></i></label></h2>
-                <p>Store double the switch value in register <code>$2</code> (after setting <code>$1</code>).</p>
-                <p>Tip: Arithmetic insructions are not allowed in this level. Check for instructions in the "logic" category instead.</p>
-            }
+                @if (lc.Section >= 1)
+                {
+                    <h3>Step Two <label class="inputCheckmark" id="checkmarkTwo"><i class="bi bi-check-lg"></i></label></h3>
+                    <p>Store double the switch value in register <code>$2</code> (after setting <code>$1</code>).</p>
+                    <p>Tip: Arithmetic insructions are not allowed in this level. Check for instructions in the "logic" category instead.</p>
+                }
 
-            @if (lc.Section >= 2)
-            {
-                <p>Nice work, both shifting tasks are complete.</p>
-            }
-        </section>
+                @if (lc.Section >= 2)
+                {
+                    <p>Nice work, both shifting tasks are complete.</p>
+                    <button class="btn btn-primary" @onclick="NextSection">Next Section</button>
+                }
+            </section>
+        }
+        else
+        {
+            <section>
+                <h2>Masking</h2>
+                <h3>Step One <label class="inputCheckmark" id="checkmarkThree"><i class="bi bi-check-lg"></i></label></h3>
+                <p>Load only the lower 8 bits of the switches into register <code>$3</code>.</p>
+                <p>Tip: turn on switches in both halves to verify masking behavior, then confirm <code>$3</code> keeps only the lower byte.</p>
+
+                @if (lc.Section >= 1)
+                {
+                    <h3>Step Two <label class="inputCheckmark" id="checkmarkFour"><i class="bi bi-check-lg"></i></label></h3>
+                    <p>Load the upper 8 bits of the switches into register <code>$4</code> (after setting <code>$3</code>).</p>
+                    <p>Tip: combine masking and a right shift to move the upper byte into position.</p>
+                }
+
+                @if (lc.Section >= 2)
+                {
+                    <p>Great work, masking is complete.</p>
+                }
+            </section>
+        }
     </div>;
 
     public string maxInstances = "{ 'textHead': 1}";
+
+    public string CurrentStartingWorkspace => phase == LevelFourPhase.Shifting ? shiftingStartingWorkspace : maskingStartingWorkspace;
     
-    public string startingWorkspace = """
+    public string shiftingStartingWorkspace = """
     {"blocks":{"languageVersion":0,"blocks":[{"type":"textHead","id":"3X;D%#OW7i/C5Y`#lxV=","x":103,"y":56,"fields":{"instruction":".text"},"next":{"block":{"type":"global","id":"Ob+QV2P-Bfx5]-[OBWs[","fields":{"instruction":".global main"},"next":{"block":{"type":"label","id":"5[{_!6Q9!c/j+g44.{5h","fields":{"label":"main"},"next":{"block":{"type":"jumpRegister","id":"3[hkavo[E!#|I|AnROCV","fields":{"instruction":"jr","register":"$ra"}}}}}}}}]}}
     """;
+
+    public string maskingStartingWorkspace = """
+    {"blocks":{"languageVersion":0,"blocks":[{"type":"textHead","id":"t7g#QJq6*^W0xMDrrkM]","x":103,"y":56,"fields":{"instruction":".text"},"next":{"block":{"type":"global","id":"NLeN3S!hF=2(Q5A3%6nP","fields":{"instruction":".global main"},"next":{"block":{"type":"label","id":"5[{_!6Q9!c/j+g44.{5h","fields":{"label":"main"},"next":{"block":{"type":"jumpRegister","id":"3[hkavo[E!#|I|AnROCV","fields":{"instruction":"jr","register":"$ra"}}}}}}}}]}}
+    """;
+
+    private void SyncChecklistState()
+    {
+        if (phase == LevelFourPhase.Shifting)
+        {
+            ChecklistState.Set("levelFour", "Shifting", lc.Section >= 2 ? ChecklistStepStatus.Complete : ChecklistStepStatus.Current);
+            ChecklistState.Set("levelFour", "Masking", lc.Section >= 2 ? ChecklistStepStatus.Current : ChecklistStepStatus.Incomplete);
+            return;
+        }
+
+        ChecklistState.Set("levelFour", "Shifting", ChecklistStepStatus.Complete);
+        ChecklistState.Set("levelFour", "Masking", lc.Section >= 2 ? ChecklistStepStatus.Complete : ChecklistStepStatus.Current);
+    }
+
+    private enum LevelFourPhase
+    {
+        Shifting = 0,
+        Masking = 1
+    }
 }
