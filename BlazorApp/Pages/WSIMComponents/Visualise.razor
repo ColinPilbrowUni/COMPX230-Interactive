@@ -92,6 +92,80 @@
         JSRuntime.InvokeVoidAsync("changeFormat", id, ir.ToString());
     }
 
+    private static string FormatBinary32(uint value)
+    {
+        return "0b" + Convert.ToString(value, 2).PadLeft(32, '0');
+    }
+
+    private static string FormatBinary16(uint value)
+    {
+        return "0b" + Convert.ToString(value, 2).PadLeft(16, '0');
+    }
+
+    private uint GetArithmeticResult()
+    {
+        uint left = Board.CPU.mGpRegisters[ir.Rs];
+
+        if (ir.OpCode == IR.Opcode.arith_i)
+        {
+            uint rightRaw = ir.Immed16;
+            int signedLeft = unchecked((int)left);
+            int signedRight = unchecked((short)rightRaw);
+
+            return ir.Func switch
+            {
+                IR.Function.add => unchecked((uint)(signedLeft + signedRight)),
+                IR.Function.addu => unchecked(left + rightRaw),
+                IR.Function.sub => unchecked((uint)(signedLeft - signedRight)),
+                IR.Function.subu => unchecked(left - rightRaw),
+                IR.Function.mult => unchecked((uint)(signedLeft * signedRight)),
+                IR.Function.multu => unchecked(left * rightRaw),
+                IR.Function.div => signedRight == 0 ? 0u : unchecked((uint)(signedLeft / signedRight)),
+                IR.Function.divu => rightRaw == 0 ? 0u : unchecked(left / rightRaw),
+                IR.Function.rem => signedRight == 0 ? 0u : unchecked((uint)(signedLeft % signedRight)),
+                IR.Function.remu => rightRaw == 0 ? 0u : unchecked(left % rightRaw),
+                IR.Function.lhi => rightRaw << 16,
+                _ => throw new InvalidOperationException($"Unsupported arithmetic function: {ir.Func}")
+            };
+        }
+
+        uint right = Board.CPU.mGpRegisters[ir.Rt];
+        int signedLeftRegister = unchecked((int)left);
+        int signedRightRegister = unchecked((int)right);
+
+        return ir.Func switch
+        {
+            IR.Function.add => unchecked((uint)(signedLeftRegister + signedRightRegister)),
+            IR.Function.addu => unchecked(left + right),
+            IR.Function.sub => unchecked((uint)(signedLeftRegister - signedRightRegister)),
+            IR.Function.subu => unchecked(left - right),
+            IR.Function.mult => unchecked((uint)(signedLeftRegister * signedRightRegister)),
+            IR.Function.multu => unchecked(left * right),
+            IR.Function.div => signedRightRegister == 0 ? 0u : unchecked((uint)(signedLeftRegister / signedRightRegister)),
+            IR.Function.divu => right == 0 ? 0u : unchecked(left / right),
+            IR.Function.rem => signedRightRegister == 0 ? 0u : unchecked((uint)(signedLeftRegister % signedRightRegister)),
+            IR.Function.remu => right == 0 ? 0u : unchecked(left % right),
+            IR.Function.lhi => right << 16,
+            _ => throw new InvalidOperationException($"Unsupported arithmetic function: {ir.Func}")
+        };
+    }
+
+    private uint GetShiftResult()
+    {
+        uint value = Board.CPU.mGpRegisters[ir.Rs];
+        int shiftAmount = ir.OpCode == IR.Opcode.arith_i
+            ? (int)ir.Immed16
+            : (int)Board.CPU.mGpRegisters[ir.Rt];
+
+        return ir.Func switch
+        {
+            IR.Function.sll => value << shiftAmount,
+            IR.Function.srl => value >> shiftAmount,
+            IR.Function.sra => unchecked((uint)((int)value >> shiftAmount)),
+            _ => throw new InvalidOperationException($"Unsupported shift function: {ir.Func}")
+        };
+    }
+
     protected override Task OnParametersSetAsync()
     {
         needVisualiseUpdate = true;
@@ -107,44 +181,26 @@
         await JSRuntime.InvokeVoidAsync("updateSign", ir.ToString());
 
         @* Rs *@
-        await JSRuntime.InvokeVoidAsync("updateVisualiser", "visualiseSource", "0b" + Convert.ToString(Board.CPU.mGpRegisters[ir.Rs], 2).PadLeft(32, '0'));
+        await JSRuntime.InvokeVoidAsync("updateVisualiser", "visualiseSource", FormatBinary32(Board.CPU.mGpRegisters[ir.Rs]));
 
         @* i / Rt *@
         if (ir.OpCode == IR.Opcode.arith_i)
         {
-            await JSRuntime.InvokeVoidAsync("updateVisualiser", "visualiseImmed", Regex.IsMatch(ir.ToString(), arithmeticRegex) ? "0b" + Convert.ToString(ir.Immed16, 2).PadLeft(16, '0') : ir.Immed16);
+            await JSRuntime.InvokeVoidAsync("updateVisualiser", "visualiseImmed", Regex.IsMatch(ir.ToString(), arithmeticRegex) ? FormatBinary16(ir.Immed16) : ir.Immed16);
         }
         else
         {
-            await JSRuntime.InvokeVoidAsync("updateVisualiser", "visualiseSourceTwo", "0b" + Convert.ToString(Board.CPU.mGpRegisters[ir.Rt], 2).PadLeft(32, '0'));
+            await JSRuntime.InvokeVoidAsync("updateVisualiser", "visualiseSourceTwo", FormatBinary32(Board.CPU.mGpRegisters[ir.Rt]));
         }
 
         @* Rd *@
         if (Regex.IsMatch(ir.ToString(), arithmeticRegex))
         {
-            if (ir.OpCode == IR.Opcode.arith_i)
-            {
-                await JSRuntime.InvokeVoidAsync("updateVisualiser", "visualiseDest", "0b" + Convert.ToString(Board.CPU.mGpRegisters[ir.Rs] + ir.Immed16, 2).PadLeft(32, (ir.Immed16 & 0x8000) == 0x8000 ? '1' : '0'));
-            }
-            else
-            {
-                await JSRuntime.InvokeVoidAsync("updateVisualiser", "visualiseDest", "0b" + Convert.ToString(Board.CPU.mGpRegisters[ir.Rs] + Board.CPU.mGpRegisters[ir.Rt], 2).PadLeft(32, (ir.Immed16 & 0x8000) == 0x8000 ? '1' : '0'));
-            }
+            await JSRuntime.InvokeVoidAsync("updateVisualiser", "visualiseDest", FormatBinary32(GetArithmeticResult()));
         }
         else
         {
-            switch (ir.Func)
-            {
-                case IR.Function.sll:
-                    await JSRuntime.InvokeVoidAsync("updateVisualiser", "visualiseDest", Convert.ToString((Board.CPU.mGpRegisters[ir.Rs] << (ir.OpCode == IR.Opcode.arith_i ? (int)ir.Immed16 : (int)Board.CPU.mGpRegisters[ir.Rt])), 2).PadLeft(32, '0'));
-                    break;
-                case IR.Function.srl:
-                    await JSRuntime.InvokeVoidAsync("updateVisualiser", "visualiseDest", Convert.ToString((Board.CPU.mGpRegisters[ir.Rs] >> (ir.OpCode == IR.Opcode.arith_i ? (int)ir.Immed16 : (int)Board.CPU.mGpRegisters[ir.Rt])), 2).PadLeft(32, '0').PadLeft(32, '0'));
-                    break;
-                case IR.Function.sra:
-                    await JSRuntime.InvokeVoidAsync("updateVisualiser", "visualiseDest", Convert.ToString(((uint)Board.CPU.mGpRegisters[ir.Rs] >> (ir.OpCode == IR.Opcode.arith_i ? (int)ir.Immed16 : (int)Board.CPU.mGpRegisters[ir.Rt])), 2).PadLeft(32, (Board.CPU.mGpRegisters[ir.Rs] & 0x80000000) == 0x80000000 ? '1' : '0'));
-                    break;
-            }
+            await JSRuntime.InvokeVoidAsync("updateVisualiser", "visualiseDest", FormatBinary32(GetShiftResult()));
         }
     }
 }
