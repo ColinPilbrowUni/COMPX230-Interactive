@@ -1,0 +1,229 @@
+@inject SpotlightRegistry Registry
+@inject IJSRuntime JS
+@implements IDisposable
+
+<button class="walkthrough-trigger-btn" @onclick="StartTour">Walkthrough</button>
+
+@if (step >= 0)
+{
+    <div class="overlay">
+
+        <!-- Spotlight highlight -->
+        @if (rect != null)
+        {
+            <div class="spotlight"
+                style="
+                    top:@($"{rect.Top - 5}px");
+                    left:@($"{rect.Left - 5}px");
+                    width:@($"{rect.Width + 10}px");
+                    height:@($"{rect.Height + 10}px");
+                ">
+            </div>
+
+            <!-- Tooltip box -->
+                <div class="walkthrough-tooltip"
+                 style="
+                    position: absolute;
+                    top:@($"{TooltipToppx}px");
+                    left:@($"{TooltipLeftpx}px");
+                 ">
+                <button class="walkthrough-close" @onclick="ExitTour" aria-label="Close">&times;</button>
+                <p class="walkthrough-text">@GetText(step)</p>
+
+                <div style="display:flex; gap:8px;">
+                    <button class="walkthrough-btn" @onclick="Next">@(step >= steps.Length - 1 ? "Done" : "Next")</button>
+                </div>
+            </div>
+        }
+
+    </div>
+}
+
+@code {
+
+    private int step = -1;
+
+    private string[] steps = new[]
+    {
+        "levelSelect",
+        "resetLevelButton",
+        "saveWorkspace",
+        "loadWorkspace",
+        "resetWorkspace",
+        "compileButton",
+        "downloadCodeButton",
+        "undoButton",
+        "runButton",
+        "stepButton"
+    };
+
+    private Rect? rect;
+
+    public class Rect
+    {
+        public double Top { get; set; }
+        public double Left { get; set; }
+        public double Width { get; set; }
+        public double Height { get; set; }
+        public double ViewportWidth { get; set; }
+        public double ViewportHeight { get; set; }
+    }
+
+    // -------------------------
+    // LIFECYCLE
+    // -------------------------
+    protected override async Task OnInitializedAsync()
+    {
+        await JS.InvokeVoidAsync("walkthroughRegisterEsc", DotNetObjectReference.Create(this));
+    }
+
+    public void Dispose()
+    {
+        JS.InvokeVoidAsync("walkthroughUnregisterEsc");
+    }
+
+    [JSInvokable]
+    public async Task EscPressed() => await ExitTour();
+
+    // -------------------------
+    // START TOUR
+    // -------------------------
+    private async Task StartTour()
+    {
+        step = 0;
+
+        // small delay helps ensure layout is ready
+        await Task.Delay(50);
+
+        await MoveSpotlight();
+    }
+
+    // -------------------------
+    // MOVE SPOTLIGHT
+    // -------------------------
+    private async Task MoveSpotlight()
+    {
+        if (step < 0 || step >= steps.Length)
+        {
+            rect = null;
+            return;
+        }
+
+        var key = steps[step];
+
+        // Components may register spotlight refs slightly after first paint.
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            if (Registry.TryGet(key, out var element))
+            {
+                rect = await JS.InvokeAsync<Rect?>("getRect", element);
+                break;
+            }
+
+            await Task.Delay(30);
+        }
+
+        StateHasChanged();
+    }
+
+    // -------------------------
+    // NEXT STEP
+    // -------------------------
+    private async Task Next()
+    {
+        step++;
+
+        if (step >= steps.Length)
+        {
+            await ExitTour();
+            return;
+        }
+
+        await MoveSpotlight();
+    }
+
+    // -------------------------
+    // EXIT TOUR
+    // -------------------------
+    private Task ExitTour()
+    {
+        step = -1;
+        rect = null;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    // -------------------------
+    // TOOLTIP TEXT
+    // -------------------------
+    private string GetText(int step)
+    {
+        return step switch
+        {
+            0 => "Use the level selector to switch between levels and track your progress.",
+            1 => "You can erase your progress for specific levels here if you want to revise them.",
+            2 => "Save your current Blockly workspace to a file so you can reload it later.",
+            3 => "Load a previously saved Blockly workspace from a file.",
+            4 => "Reset the Blockly workspace back to its starting state.",
+            5 => "Compile your Blockly program so it can run in WRAMP.",
+            6 => "Download the Blockly program as WRAMP code.",
+            7 => "Undo the last instruction executed in your program.",
+            8 => "Run the program continuously from the current state.",
+            9 => "Step through the program one instruction at a time.",
+            _ => ""
+        };
+    }
+
+    // -------------------------
+    // TOOLTIP POSITIONING
+    // -------------------------
+    private const double TooltipEstimatedWidth = 320;
+    private const double TooltipEstimatedHeight = 110;
+    private const double Gap = 12;
+
+    private enum Side { Below, Above, Right, Left }
+
+    private Side GetBestSide()
+    {
+        if (rect == null) return Side.Below;
+        double spaceBelow = rect.ViewportHeight - (rect.Top + rect.Height);
+        double spaceAbove = rect.Top;
+        double spaceRight = rect.ViewportWidth - (rect.Left + rect.Width);
+
+        if (spaceBelow >= TooltipEstimatedHeight + Gap) return Side.Below;
+        if (spaceAbove >= TooltipEstimatedHeight + Gap) return Side.Above;
+        if (spaceRight >= TooltipEstimatedWidth + Gap) return Side.Right;
+        return Side.Left;
+    }
+
+    private static double Clamp(double value, double min, double max) =>
+        Math.Max(min, Math.Min(value, max));
+
+    private double TooltipToppx
+    {
+        get
+        {
+            if (rect == null) return 0;
+            return GetBestSide() switch
+            {
+                Side.Below => Clamp(rect.Top + rect.Height + Gap, 0, rect.ViewportHeight - TooltipEstimatedHeight),
+                Side.Above => Clamp(rect.Top - TooltipEstimatedHeight - Gap, 0, rect.ViewportHeight - TooltipEstimatedHeight),
+                _ => Clamp(rect.Top, 0, rect.ViewportHeight - TooltipEstimatedHeight)
+            };
+        }
+    }
+
+    private double TooltipLeftpx
+    {
+        get
+        {
+            if (rect == null) return 0;
+            return GetBestSide() switch
+            {
+                Side.Right => rect.Left + rect.Width + Gap,
+                Side.Left => Clamp(rect.Left - TooltipEstimatedWidth - Gap, 0, rect.ViewportWidth - TooltipEstimatedWidth),
+                _ => Clamp(rect.Left, 0, rect.ViewportWidth - TooltipEstimatedWidth)
+            };
+        }
+    }
+}

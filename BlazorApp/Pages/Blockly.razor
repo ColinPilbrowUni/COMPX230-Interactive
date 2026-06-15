@@ -1,16 +1,17 @@
 @using System.Text.RegularExpressions
 @inject IJSRuntime JSRuntime
+@inject SpotlightRegistry SpotlightRegistry
 
 <div class="mb-2" aria-label="Blockly Controls">
     <div class="btn-group" role="group">
-        <button type="button" class="btn btn-warning" @onclick="saveWorkspace">Save Workspace</button>
-        <label class="btn btn-info">
+        <button type="button" class="btn btn-warning" @onclick="saveWorkspace" @ref="saveWorkspaceRef">Save Workspace</button>
+        <label class="btn btn-info" @ref="loadWorkspaceRef">
             Load Workspace
             <InputFile hidden id="workspaceInput" OnChange="loadWorkspace"/>
         </label>
     </div>
 
-    <button type="button" class="btn btn-danger ms-2" @onclick="resetWorkspace">Reset</button>
+    <button type="button" class="btn btn-danger ms-2" @onclick="resetWorkspace" @ref="resetWorkspaceRef">Reset</button>
 </div>
 
 <div id="blocklyDiv"></div>
@@ -28,10 +29,17 @@
     [Parameter]
     public string? startingWorkspace { get; set; }
 
+    private ElementReference saveWorkspaceRef;
+    private ElementReference loadWorkspaceRef;
+    private ElementReference resetWorkspaceRef;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
+            SpotlightRegistry.Register("saveWorkspace", saveWorkspaceRef);
+            SpotlightRegistry.Register("loadWorkspace", loadWorkspaceRef);
+            SpotlightRegistry.Register("resetWorkspace", resetWorkspaceRef);
             await JSRuntime.InvokeVoidAsync("initBlockly", Toolbox, maxInstances, startingWorkspace);
             await JSRuntime.InvokeVoidAsync("initUpdate");
             await JSRuntime.InvokeVoidAsync("initBlocklyTheme");

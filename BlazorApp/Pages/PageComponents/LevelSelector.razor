@@ -2,7 +2,7 @@
 @inject ChecklistStateStore ChecklistState
 @implements IDisposable
 
-<div class="col-auto">
+<div class="col-auto" @ref="levelSelectRef">
     <button class="btn btn-primary my-2" type="button" data-bs-toggle="collapse" data-bs-target="#levelSelect" aria-expanded="true" aria-controls="levelSelect">
         ☰
     </button>
@@ -18,7 +18,7 @@
             <LevelNavItem href="levelBranching" name="Branching" Steps="@NoSteps" />
             <LevelNavItem href="levelFour" name="#4" Steps='@GetLevelSteps("levelFour")' />
 
-            <button class="btn btn-danger float-end my-2 ms-4" @onclick="ResetLevels" data-bs-toggle="modal" data-bs-target="#deleteModal">
+            <button class="btn btn-danger float-end my-2 ms-4" @onclick="ResetLevels" data-bs-toggle="modal" data-bs-target="#deleteModal" @ref="resetLevelButtonRef"> 
                 Reset Level Progress
             </button>
         </ul>
@@ -27,6 +27,11 @@
 
 @code {
     private static readonly IReadOnlyList<ChecklistStep> NoSteps = [];
+    private ElementReference levelSelectRef;
+    private ElementReference resetLevelButtonRef;
+    [Inject]
+    private SpotlightRegistry SpotlightRegistry { get; set; } = default!;
+
 
     protected override void OnInitialized()
     {
@@ -37,6 +42,8 @@
     {
         if (firstRender)
         {
+            SpotlightRegistry.Register("levelSelect", levelSelectRef);
+            SpotlightRegistry.Register("resetLevelButton", resetLevelButtonRef);
             await JSRuntime.InvokeVoidAsync("levelSelect");
             await JSRuntime.InvokeVoidAsync("levelCheck");
             await JSRuntime.InvokeVoidAsync("clearPopovers");

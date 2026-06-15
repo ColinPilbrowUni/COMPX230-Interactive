@@ -5,21 +5,22 @@
 @using RexSimulator.Hardware.Wramp
 
 @inject IJSRuntime JSRuntime
+@inject SpotlightRegistry SpotlightRegistry
 @implements IDisposable
 
 <div class="mb-2">
     <h2>Controls</h2>
 
     <div class="btn-group me-2" role="group" aria-label="Code Controls">
-        <button type="button" id="compileButton" class="btn btn-warning" @onclick="OnCompileClicked" data-bs-toggle="popover" data-bs-placement="bottom" data-bs-custom-class="compilePopover">Compile</button>
-        <button type="button" class="btn btn-info" @onclick="saveCode">Download Code</button>
+        <button type="button" id="compileButton" class="btn btn-warning" @onclick="OnCompileClicked" data-bs-toggle="popover" data-bs-placement="bottom" data-bs-custom-class="compilePopover" @ref="compileButtonRef">Compile</button>
+        <button type="button" class="btn btn-info" @onclick="saveCode" @ref="downloadCodeButtonRef">Download Code</button>
     </div>
 
     <div class="btn-group" role="group" aria-label="WRAMP Controls">
-        <button type="button" class="btn btn-warning" @onclick="Undo" disabled="@(pcStates.Count == 0)">&lt;-- Undo</button>
-        <button type="button" class="btn btn-success" @onclick="Run" disabled="@(!firstCompilation)" hidden="@running">Run</button>
-        <button type="button" class="btn btn-success" @onclick="Pause" hidden="@(!running)">Pause</button>
-        <button type="button" class="btn btn-info" @onclick="Step" disabled="@(!firstCompilation || running || (board.CPU.InterruptStatus & (uint)0xF000) != 0)">Step --&gt;</button>
+        <button type="button" class="btn btn-warning" @onclick="Undo" disabled="@(pcStates.Count == 0)" @ref="undoButtonRef">&lt;-- Undo</button>
+        <button type="button" class="btn btn-success" @onclick="Run" disabled="@(!firstCompilation)" hidden="@running" @ref="runButtonRef">Run</button>
+        <button type="button" class="btn btn-success" @onclick="Pause" hidden="@(!running)" @ref="pauseButtonRef">Pause</button>
+        <button type="button" class="btn btn-info" @onclick="Step" disabled="@(!firstCompilation || running || (board.CPU.InterruptStatus & (uint)0xF000) != 0)" @ref="stepButtonRef">Step --&gt;</button>
     </div>
 </div>
 
@@ -222,6 +223,13 @@
     [Parameter]
     public string[]? Library { get; set; }
 
+    private ElementReference compileButtonRef;
+    private ElementReference downloadCodeButtonRef;
+    private ElementReference undoButtonRef;
+    private ElementReference runButtonRef;
+    private ElementReference pauseButtonRef;
+    private ElementReference stepButtonRef;
+
     public enum ExceptionSource { GPF = 0x1000, SYSCALL = 0x2000, BREAK = 0x4000, ARITH = 0x8000 }
 
     public List<BoardState> memoryStates = new List<BoardState>();
@@ -271,6 +279,13 @@
     {
         if (firstRender)
         {
+            SpotlightRegistry.Register("compileButton", compileButtonRef);
+            SpotlightRegistry.Register("downloadCodeButton", downloadCodeButtonRef);
+            SpotlightRegistry.Register("undoButton", undoButtonRef);
+            SpotlightRegistry.Register("runButton", runButtonRef);
+            SpotlightRegistry.Register("pauseButton", pauseButtonRef);
+            SpotlightRegistry.Register("stepButton", stepButtonRef);
+
             //Load SSDs on page load
             updateSSDs();
 
