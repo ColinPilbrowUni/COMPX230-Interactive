@@ -4,7 +4,7 @@
 @inject IJSRuntime JSRuntime
 @inject ChecklistStateStore ChecklistState
 
-<Level @ref="levelComponent" Title="#4" BoardChanged="CheckBoard" UIComponents="@Components" Toolbox="@CurrentToolbox" WSIMInstructions="@Instructions" MainInstructions=null startingWorkspace="@CurrentStartingWorkspace" maxInstances="@maxInstances" />
+<Level @ref="levelComponent" Title="#4" BoardChanged="CheckBoard" UIComponents="@CurrentComponents" Toolbox="@CurrentToolbox" WSIMInstructions="@Instructions" MainInstructions=null startingWorkspace="@CurrentStartingWorkspace" maxInstances="@maxInstances" />
 
 @code {
     public Level? levelComponent;
@@ -12,7 +12,12 @@
     required public WSIM WSIM;
     required public RexBoard board;
     private LevelFourPhase phase = LevelFourPhase.Shifting;
-    public UIComponents Components = new UIComponents(Blockly: true, Code: true, SSDs: true, Switches: true, LEDs: true, GPRegisters: true, ParallelRegisters: true);
+    private string maskingMessageGuess = "";
+    private string? previousMaskingCode;
+    private const string ExpectedMaskingMessage = "hello";
+    private const string ExpectedMaskingSerialOutput = "HELLO";
+    public UIComponents shiftingComponents = new UIComponents(Blockly: true, Code: true, SSDs: true, Switches: true, LEDs: true, GPRegisters: true, ParallelRegisters: true);
+    public UIComponents maskingComponents = new UIComponents(Blockly: true, Code: true, SSDs: true, Switches: true, LEDs: true, GPRegisters: true, ParallelRegisters: true, SerialPort: true);
     public Toolbox shiftingToolbox = new Toolbox
     {
         contents = new List<Category>() {
@@ -93,6 +98,7 @@
     };
 
     public Toolbox CurrentToolbox => phase == LevelFourPhase.Shifting ? shiftingToolbox : maskingToolbox;
+    public UIComponents CurrentComponents => phase == LevelFourPhase.Shifting ? shiftingComponents : maskingComponents;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -112,7 +118,7 @@
 
             SyncChecklistState();
             await ApplySectionConfig();
-            CheckBoard();
+            await CheckBoard();
             StateHasChanged();
         }
     }
@@ -122,7 +128,7 @@
     public bool maskingStepOne = false;
     public bool maskingStepTwo = false;
 
-    public void CheckBoard()
+    public async Task CheckBoard()
     {
         if (levelComponent == null || levelComponent.wsimComponent == null)
         {
@@ -156,15 +162,14 @@
         }
         else
         {
-            uint lowerByte = switchValue & 0xFF;
-            uint upperByte = (switchValue >> 8) & 0xFF;
+            string userCode = await lc.GetUserCode();
+            ClearSerialOutputIfCodeChanged(userCode);
+            bool answeredMaskingQuestionOne = maskingMessageGuess == ExpectedMaskingMessage;
+            bool dataSectionUnaltered = IsMaskingDataSectionUnaltered(userCode);
+            bool serialOutputMatches = board.Serial1.serialText == ExpectedMaskingSerialOutput;
 
-            bool regThreeLowerByte = WSIM.Verify(new BoardCheck(WRAMPComponents.GPRegisters, lowerByte, 3));
-            bool regFourUpperByte = WSIM.Verify(new BoardCheck(WRAMPComponents.GPRegisters, upperByte, 4));
-
-            // Require at least one switch in the upper byte to ensure masking work is visible.
-            maskingStepOne = (switchValue & 0xFF00) != 0 && regThreeLowerByte;
-            maskingStepTwo = maskingStepOne && regFourUpperByte;
+            maskingStepOne = lc.Section >= 1 || answeredMaskingQuestionOne;
+            maskingStepTwo = lc.Section >= 2 || (maskingStepOne && serialOutputMatches && dataSectionUnaltered);
 
             if (maskingStepOne && lc.Section == 0)
             {
@@ -205,8 +210,14 @@
         ChecklistState.Set("levelFour", "Masking", ChecklistStepStatus.Current);
         lc.UncheckAllObjectives();
         await ApplySectionConfig();
-        CheckBoard();
+        await CheckBoard();
         StateHasChanged();
+    }
+
+    public async Task OnMaskingMessageChanged(ChangeEventArgs e)
+    {
+        maskingMessageGuess = e.Value?.ToString() ?? "";
+        await CheckBoard();
     }
 
     public async Task ApplySectionConfig()
@@ -214,12 +225,12 @@
         if (phase == LevelFourPhase.Shifting)
         {
             await lc.UpdateToolbox(shiftingToolbox);
-            await JSRuntime.InvokeVoidAsync("loadWorkspace", shiftingStartingWorkspace);
+            await JSRuntime.InvokeVoidAsync("loadPresetWorkspace", shiftingStartingWorkspace);
             return;
         }
 
         await lc.UpdateToolbox(maskingToolbox);
-        await JSRuntime.InvokeVoidAsync("loadWorkspace", maskingStartingWorkspace);
+        await JSRuntime.InvokeVoidAsync("loadPresetWorkspace", maskingStartingWorkspace);
     }
 
     public RenderFragment Instructions =>
@@ -230,7 +241,7 @@
                 <h2>Shifting</h2>
                 <h3>Step One <label class="inputCheckmark" id="checkmarkOne"><i class="bi bi-check-lg"></i></label></h3>
                 <p>First task: load the current switch value into register <code>$1</code>.</p>
-                <p>Tip: Make sure at least one switch is on, then run or step your code and confirm <code>$1</code> updates.</p>
+                <p>Tip: <strong>Make sure at least one switch is on</strong>, then run or step your code and confirm <code>$1</code> updates.</p>
 
                 @if (lc.Section >= 1)
                 {
@@ -251,14 +262,17 @@
             <section>
                 <h2>Masking</h2>
                 <h3>Step One <label class="inputCheckmark" id="checkmarkThree"><i class="bi bi-check-lg"></i></label></h3>
-                <p>Load only the lower 8 bits of the switches into register <code>$3</code>.</p>
-                <p>Tip: turn on switches in both halves to verify masking behavior, then confirm <code>$3</code> keeps only the lower byte.</p>
+                <p>This starter program writes a message to the serial port.</p>
+                <p>What message is it writing? Type the exact message below.</p>
+                <input id="maskingMessageInput" @oninput="OnMaskingMessageChanged" placeholder="Type the message" />
 
                 @if (lc.Section >= 1)
                 {
                     <h3>Step Two <label class="inputCheckmark" id="checkmarkFour"><i class="bi bi-check-lg"></i></label></h3>
-                    <p>Load the upper 8 bits of the switches into register <code>$4</code> (after setting <code>$3</code>).</p>
-                    <p>Tip: combine masking and a right shift to move the upper byte into position.</p>
+                    <p>Now make the message uppercase in serial output.</p>
+                    <p>Tip: You only need one additional instruction added to the starting program.</p>
+                    <p><strong>WARNING: You cannot modify .data and serial output is cleared on code changing</strong>.</p>
+                    <p>Step two is complete only when serial output is exactly <code>HELLO</code> and without editing the message in .data</p>
                 }
 
                 @if (lc.Section >= 2)
@@ -278,8 +292,32 @@
     """;
 
     public string maskingStartingWorkspace = """
-    {"blocks":{"languageVersion":0,"blocks":[{"type":"textHead","id":"t7g#QJq6*^W0xMDrrkM]","x":103,"y":56,"fields":{"instruction":".text"},"next":{"block":{"type":"global","id":"NLeN3S!hF=2(Q5A3%6nP","fields":{"instruction":".global main"},"next":{"block":{"type":"label","id":"5[{_!6Q9!c/j+g44.{5h","fields":{"label":"main"},"next":{"block":{"type":"jumpRegister","id":"3[hkavo[E!#|I|AnROCV","fields":{"instruction":"jr","register":"$ra"}}}}}}}}]}}
+    {"blocks":{"languageVersion":0,"blocks":[{"type":"textHead","id":"4`u!zoj%#Y-_o,444u{)","x":93,"y":12,"fields":{"instruction":".text"},"next":{"block":{"type":"global","id":"qs/,J!K2+([(PN0LbRH:","fields":{"instruction":".global main"},"next":{"block":{"type":"label","id":"}_rsJs]h7WfPP~rBw8~-","fields":{"label":"main"},"next":{"block":{"type":"arithmeticImmediate","id":"`!%J)[C.VeyDgdSQVXrX","fields":{"instruction":"addi","register1":"$2","register2":"$0","immediate":"0"},"next":{"block":{"type":"label","id":"I|?^f#u`:12hVi[g_N{l","fields":{"label":"loop"},"next":{"block":{"type":"loadWord","id":"]{RhW9sasc4CsI0Jiw|j","fields":{"instruction":"lw","register1":"$9","offset":"hello","register2":"$2"},"next":{"block":{"type":"branchOn","id":"`01-SLlEL$xNK1XDDAhg","fields":{"instruction":"beqz","register":"$9","offset":"done"},"next":{"block":{"type":"label","id":"g05=kzp79@t#WnT|M(Qk","fields":{"label":"check"},"next":{"block":{"type":"loadWord","id":"!Y@tqHHLiYCqo7o~H)9,","fields":{"instruction":"lw","register1":"$11","offset":"0x70003","register2":"$0"},"next":{"block":{"type":"bitwiseImmediate","id":"^@b3Vl}(7_IOeEemS+bu","fields":{"instruction":"andi","register1":"$11","register2":"$11","immediate":"0x2"},"next":{"block":{"type":"branchOn","id":"$5j9/NR03D8!|k143t^V","fields":{"instruction":"beqz","register":"$11","offset":"check"},"next":{"block":{"type":"storeWord","id":"lt.q^2E{(exy}gjq~#d.","fields":{"instruction":"sw","register1":"$9","offset":"0x70000","register2":"$0"},"next":{"block":{"type":"arithmeticImmediate","id":"t!NzT`T6d[02CygZ{ce{","fields":{"instruction":"addi","register1":"$2","register2":"$2","immediate":"1"},"next":{"block":{"type":"jump","id":"xxO}vHScRW9_Gw[B(?[0","fields":{"instruction":"j","address":"loop"},"next":{"block":{"type":"label","id":"=*HrbL^T6lp*^7/9;bR0","fields":{"label":"done"},"next":{"block":{"type":"jumpRegister","id":"?U/72PEqYQ0`x+tpmPKm","fields":{"instruction":"jr","register":"$ra"},"next":{"block":{"type":"dataHead","id":"[S*5qpsZR}^nPgauFv|b","fields":{"instruction":".data"},"next":{"block":{"type":"label","id":")i_FgtwhE.7LPVB@HIpJ","fields":{"label":"hello"},"next":{"block":{"type":"asciiz","id":"8]DL!(PJ-.bz+!+qT+;k","fields":{"instruction":".asciiz ","string":"hello"}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}]}}
     """;
+
+    private bool IsMaskingDataSectionUnaltered(string userCode)
+    {
+        return userCode.Contains(".asciiz  \"hello\"", StringComparison.Ordinal);
+    }
+
+    private void ClearSerialOutputIfCodeChanged(string userCode)
+    {
+        if (previousMaskingCode == null)
+        {
+            previousMaskingCode = userCode;
+            return;
+        }
+
+        if (previousMaskingCode == userCode)
+        {
+            return;
+        }
+
+        board.Serial1.serialText = "";
+        board.Serial1.serialOutput.Clear();
+        board.Serial1.cursor = 0;
+        previousMaskingCode = userCode;
+    }
 
     private void SyncChecklistState()
     {

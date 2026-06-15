@@ -18,6 +18,11 @@ window.initBlockly = (tool, instances, startingWorkspace) =>
     let levelID = domains[domains.length - 1];
     blocklyStorage = (levelID === '' ? 'sandbox' : levelID) + 'Blockly';
 
+    if (startingWorkspace != null)
+    {
+        presetWorkspace = startingWorkspace;
+    }
+
     //Load any saved code from the user's previous sessions, and if there is none load the code the level provides
     let state = localStorage.getItem(blocklyStorage);
     if (state != null)
@@ -1035,6 +1040,14 @@ window.loadWorkspace = (workspaceJSON) =>
 {
     Blockly.serialization.workspaces.load(JSON.parse(workspaceJSON), workspace);
     updateCode(Blockly.Events.BLOCK_CREATE);
+}
+
+window.loadPresetWorkspace = (workspaceJSON) =>
+{
+    presetWorkspace = workspaceJSON;
+    loadWorkspace(workspaceJSON);
+    presetCode = generateCode();
+    localStorage.removeItem(blocklyStorage);
 }
 
 window.updateToolbox = (toolbox) =>
