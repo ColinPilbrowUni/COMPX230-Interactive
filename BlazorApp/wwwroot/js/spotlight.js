@@ -1,5 +1,5 @@
 window.getRect = (el) => {
-    if (!el) return null;
+    if (!el || typeof el.getBoundingClientRect !== 'function') return null;
 
     const r = el.getBoundingClientRect();
 
@@ -30,4 +30,10 @@ window.walkthroughUnregisterEsc = () => {
         _walkthroughEscHandler = null;
         _walkthroughEscRef = null;
     }
+};
+
+window.activateTab = (el) => {
+    if (!el) return;
+    const tab = bootstrap.Tab.getOrCreateInstance(el);
+    tab.show();
 };

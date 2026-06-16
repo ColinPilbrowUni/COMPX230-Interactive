@@ -285,6 +285,17 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // Always re-register tab refs so they stay current when UIComponents changes
+        // between renders (e.g. LevelFour phase transition adding new tabs).
+        if (WSIMInstructions != null) SpotlightRegistry.Register("instructionsTab", instructionsTabRef);
+        if (UIComponents.Code) SpotlightRegistry.Register("codeTab", codeTabRef);
+        if (UIComponents.GPRegisters) SpotlightRegistry.Register("gpRegisters", gpTabRef);
+        if (UIComponents.SPRegisters) SpotlightRegistry.Register("spRegisters", spTabRef);
+        if (UIComponents.RAM) SpotlightRegistry.Register("ramTab", ramTabRef);
+        if (UIComponents.ParallelRegisters) SpotlightRegistry.Register("parallelRegisters", parallelTabRef);
+        if (UIComponents.SerialPort) SpotlightRegistry.Register("serialPort", serialTabRef);
+        if (Library != null && Library[0] != "libraryName.s") SpotlightRegistry.Register("libraryTab", libraryTabRef);
+
         if (firstRender)
         {
             SpotlightRegistry.Register("compileButton", compileButtonRef);
@@ -293,18 +304,6 @@
             SpotlightRegistry.Register("runButton", runButtonRef);
             SpotlightRegistry.Register("pauseButton", pauseButtonRef);
             SpotlightRegistry.Register("stepButton", stepButtonRef);
-            SpotlightRegistry.Register("instructionsTab", instructionsTabRef);
-            SpotlightRegistry.Register("codeTab", codeTabRef);
-            SpotlightRegistry.Register("gpRegisters", gpTabRef);
-            SpotlightRegistry.Register("spRegisters", spTabRef);
-            SpotlightRegistry.Register("ramTab", ramTabRef);
-            SpotlightRegistry.Register("parallelRegisters", parallelTabRef);
-            SpotlightRegistry.Register("serialPort", serialTabRef);
-
-            if (Library != null && Library[0] != "libraryName.s")
-            {
-                SpotlightRegistry.Register("libraryTab", libraryTabRef);
-            }
 
             //Load SSDs on page load
             updateSSDs();

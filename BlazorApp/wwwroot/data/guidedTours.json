@@ -44,7 +44,15 @@
   "parallelRegistersHighlight":[
     {
       "elementKey": "parallelRegisters",
-      "description": "Click here to inspect the parallel registers."
+      "description": "Click here to inspect the parallel registers.",
+      "check": "tab"
+    }
+  ],
+  "serialPortHighlight":[
+    {
+      "elementKey": "serialPort",
+      "description": "Click here to inspect the serial port output. This is where the output of the starter program will appear.",
+      "check": "tab"
     }
   ]
 }

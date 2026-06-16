@@ -394,6 +394,19 @@ code {
     pointer-events: none;
 }
 
+.spotlight.spotlight-check {
+    pointer-events: all;
+    cursor: pointer;
+    border: 3px solid yellow;
+    animation: spotlight-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes spotlight-pulse {
+    0%   { border-color: rgba(255, 255, 0, 1); }
+    50%  { border-color: rgba(255, 255, 0, 0.1); }
+    100% { border-color: rgba(255, 255, 0, 1); }
+}
+
 .walkthrough-tooltip {
     z-index: 10001;
     position: relative;
@@ -441,6 +454,13 @@ code {
 
 .walkthrough-btn:hover {
     background-color: #1861ac;
+}
+
+.walkthrough-hint {
+    font-size: 0.85rem;
+    font-style: italic;
+    opacity: 0.75;
+    align-self: center;
 }
 
 .walkthrough-trigger-btn {

@@ -12,13 +12,14 @@
         <!-- Spotlight highlight -->
         @if (rect != null)
         {
-            <div class="spotlight"
+            <div class="spotlight @(CurrentStepHasCheck ? "spotlight-check" : "")"
                 style="
                     top:@($"{rect.Top - 5}px");
                     left:@($"{rect.Left - 5}px");
                     width:@($"{rect.Width + 10}px");
                     height:@($"{rect.Height + 10}px");
-                ">
+                "
+                @onclick="OnSpotlightClicked">
             </div>
 
             <!-- Tooltip box -->
@@ -32,7 +33,14 @@
                 <p class="walkthrough-text">@GetText(step)</p>
 
                 <div style="display:flex; gap:8px;">
-                    <button class="walkthrough-btn" @onclick="Next">@(step >= activeTour.Count - 1 ? "Done" : "Next")</button>
+                    @if (!CurrentStepHasCheck)
+                    {
+                        <button class="walkthrough-btn" @onclick="Next">@(step >= activeTour.Count - 1 ? "Done" : "Next")</button>
+                    }
+                    else
+                    {
+                        <span class="walkthrough-hint">Click the highlighted element to continue</span>
+                    }
                 </div>
             </div>
         }
@@ -60,6 +68,7 @@
     {
         public string ElementKey { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
+        public string? Check { get; set; }
     }
 
     public class Rect
@@ -184,6 +193,29 @@
     }
 
     private bool HasTour => activeTour.Count > 0;
+
+    private bool CurrentStepHasCheck =>
+        step >= 0 && step < activeTour.Count && activeTour[step].Check != null;
+
+    // -------------------------
+    // SPOTLIGHT CLICK
+    // -------------------------
+    private async Task OnSpotlightClicked()
+    {
+        if (!CurrentStepHasCheck)
+        {
+            return;
+        }
+
+        var currentStep = activeTour[step];
+
+        if (currentStep.Check == "tab" && Registry.TryGet(currentStep.ElementKey, out var element))
+        {
+            await JS.InvokeVoidAsync("activateTab", element);
+        }
+
+        await Next();
+    }
 
     private async Task LoadTours()
     {
