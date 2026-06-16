@@ -101,50 +101,50 @@
         @if (WSIMInstructions != null)
         {
             <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="instructions-tab" data-bs-toggle="tab" data-bs-target="#instructions-tab-pane" type="button" role="tab" aria-controls="instructions-tab-pane" aria-selected="true">Instructions</button>
+                <button class="nav-link active" id="instructions-tab" data-bs-toggle="tab" data-bs-target="#instructions-tab-pane" type="button" role="tab" aria-controls="instructions-tab-pane" aria-selected="true" @ref="instructionsTabRef">Instructions</button>
             </li>
         }
         @if (UIComponents.Code)
         {
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="code-tab" data-bs-toggle="tab" data-bs-target="#code-tab-pane" type="button" role="tab" aria-controls="code-tab-pane" aria-selected="false">Code</button>
+                <button class="nav-link" id="code-tab" data-bs-toggle="tab" data-bs-target="#code-tab-pane" type="button" role="tab" aria-controls="code-tab-pane" aria-selected="false" @ref="codeTabRef">Code</button>
             </li>
         }
         @if (UIComponents.GPRegisters)
         {
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="gp-tab" data-bs-toggle="tab" data-bs-target="#gp-tab-pane" type="button" role="tab" aria-controls="gp-tab-pane" aria-selected="false">GP Registers</button>
+                <button class="nav-link" id="gp-tab" data-bs-toggle="tab" data-bs-target="#gp-tab-pane" type="button" role="tab" aria-controls="gp-tab-pane" aria-selected="false" @ref="gpTabRef">GP Registers</button>
             </li>
         }
         @if (UIComponents.SPRegisters)
         {
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="sp-tab" data-bs-toggle="tab" data-bs-target="#sp-tab-pane" type="button" role="tab"
+                <button class="nav-link" id="sp-tab" data-bs-toggle="tab" data-bs-target="#sp-tab-pane" type="button" role="tab" @ref="spTabRef"
                 aria-controls="sp-tab-pane" aria-selected="false">SP Registers</button>
             </li>
         }
         @if (UIComponents.RAM)
         {
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="ram-tab" data-bs-toggle="tab" data-bs-target="#ram-tab-pane" type="button" role="tab" aria-controls="ram-tab-pane" aria-selected="false">RAM</button>
+                <button class="nav-link" id="ram-tab" data-bs-toggle="tab" data-bs-target="#ram-tab-pane" type="button" role="tab" aria-controls="ram-tab-pane" aria-selected="false" @ref="ramTabRef">RAM</button>
             </li>
         }
         @if (UIComponents.ParallelRegisters)
         {
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="parallel-tab" data-bs-toggle="tab" data-bs-target="#parallel-tab-pane" type="button" role="tab" aria-controls="parallel-tab-pane" aria-selected="false">Parallel Registers</button>
+                <button class="nav-link" id="parallel-tab" data-bs-toggle="tab" data-bs-target="#parallel-tab-pane" type="button" role="tab" aria-controls="parallel-tab-pane" aria-selected="false" @ref="parallelTabRef">Parallel Registers</button>
             </li>
         }
         @if (UIComponents.SerialPort)
         {
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="serial-tab" data-bs-toggle="tab" data-bs-target="#serial-tab-pane" type="button" role="tab" aria-controls="serial-tab-pane" aria-selected="false">Serial Port</button>
+                <button class="nav-link" id="serial-tab" data-bs-toggle="tab" data-bs-target="#serial-tab-pane" type="button" role="tab" aria-controls="serial-tab-pane" aria-selected="false" @ref="serialTabRef">Serial Port</button>
             </li>
         }
         @if (Library != null && Library[0] != "libraryName.s")
         {
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="library-tab" data-bs-toggle="tab" data-bs-target="#library-tab-pane" type="button" role="tab" aria-controls="library-tab-pane" aria-selected="false">@Library[0]</button>
+                <button class="nav-link" id="library-tab" data-bs-toggle="tab" data-bs-target="#library-tab-pane" type="button" role="tab" aria-controls="library-tab-pane" aria-selected="false" @ref="libraryTabRef">@Library[0]</button>
             </li>
         }
         <li class="nav-item ms-auto" role="presentation" @onclick="quack">
@@ -229,6 +229,14 @@
     private ElementReference runButtonRef;
     private ElementReference pauseButtonRef;
     private ElementReference stepButtonRef;
+    private ElementReference instructionsTabRef;
+    private ElementReference codeTabRef;
+    private ElementReference gpTabRef;
+    private ElementReference spTabRef;
+    private ElementReference ramTabRef;
+    private ElementReference parallelTabRef;
+    private ElementReference serialTabRef;
+    private ElementReference libraryTabRef;
 
     public enum ExceptionSource { GPF = 0x1000, SYSCALL = 0x2000, BREAK = 0x4000, ARITH = 0x8000 }
 
@@ -285,6 +293,18 @@
             SpotlightRegistry.Register("runButton", runButtonRef);
             SpotlightRegistry.Register("pauseButton", pauseButtonRef);
             SpotlightRegistry.Register("stepButton", stepButtonRef);
+            SpotlightRegistry.Register("instructionsTab", instructionsTabRef);
+            SpotlightRegistry.Register("codeTab", codeTabRef);
+            SpotlightRegistry.Register("gpRegisters", gpTabRef);
+            SpotlightRegistry.Register("spRegisters", spTabRef);
+            SpotlightRegistry.Register("ramTab", ramTabRef);
+            SpotlightRegistry.Register("parallelRegisters", parallelTabRef);
+            SpotlightRegistry.Register("serialPort", serialTabRef);
+
+            if (Library != null && Library[0] != "libraryName.s")
+            {
+                SpotlightRegistry.Register("libraryTab", libraryTabRef);
+            }
 
             //Load SSDs on page load
             updateSSDs();

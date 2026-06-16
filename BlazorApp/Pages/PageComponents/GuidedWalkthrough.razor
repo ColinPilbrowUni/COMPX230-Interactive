@@ -1,8 +1,9 @@
 @inject SpotlightRegistry Registry
 @inject IJSRuntime JS
+@inject HttpClient Http
 @implements IDisposable
 
-<button class="walkthrough-trigger-btn" @onclick="StartTour">Walkthrough</button>
+<button class="walkthrough-trigger-btn" @onclick="StartTour" disabled="@(!HasTour)">@ButtonText</button>
 
 @if (step >= 0)
 {
@@ -31,7 +32,7 @@
                 <p class="walkthrough-text">@GetText(step)</p>
 
                 <div style="display:flex; gap:8px;">
-                    <button class="walkthrough-btn" @onclick="Next">@(step >= steps.Length - 1 ? "Done" : "Next")</button>
+                    <button class="walkthrough-btn" @onclick="Next">@(step >= activeTour.Count - 1 ? "Done" : "Next")</button>
                 </div>
             </div>
         }
@@ -41,23 +42,25 @@
 
 @code {
 
+    [Parameter]
+    public string ButtonText { get; set; } = "Walkthrough";
+
+    [Parameter]
+    public string TourKey { get; set; } = "introductionTour";
+
     private int step = -1;
 
-    private string[] steps = new[]
-    {
-        "levelSelect",
-        "resetLevelButton",
-        "saveWorkspace",
-        "loadWorkspace",
-        "resetWorkspace",
-        "compileButton",
-        "downloadCodeButton",
-        "undoButton",
-        "runButton",
-        "stepButton"
-    };
+    private Dictionary<string, List<TourStep>> tours = new Dictionary<string, List<TourStep>>();
+    private List<TourStep> activeTour = new List<TourStep>();
+    private DotNetObjectReference<GuidedWalkthrough>? escCallbackReference;
 
     private Rect? rect;
+
+    public class TourStep
+    {
+        public string ElementKey { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+    }
 
     public class Rect
     {
@@ -74,12 +77,21 @@
     // -------------------------
     protected override async Task OnInitializedAsync()
     {
-        await JS.InvokeVoidAsync("walkthroughRegisterEsc", DotNetObjectReference.Create(this));
+        escCallbackReference = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("walkthroughRegisterEsc", escCallbackReference);
+        await LoadTours();
+        SetActiveTour();
+    }
+
+    protected override void OnParametersSet()
+    {
+        SetActiveTour();
     }
 
     public void Dispose()
     {
         JS.InvokeVoidAsync("walkthroughUnregisterEsc");
+        escCallbackReference?.Dispose();
     }
 
     [JSInvokable]
@@ -90,6 +102,11 @@
     // -------------------------
     private async Task StartTour()
     {
+        if (!HasTour)
+        {
+            return;
+        }
+
         step = 0;
 
         // small delay helps ensure layout is ready
@@ -103,13 +120,13 @@
     // -------------------------
     private async Task MoveSpotlight()
     {
-        if (step < 0 || step >= steps.Length)
+        if (step < 0 || step >= activeTour.Count)
         {
             rect = null;
             return;
         }
 
-        var key = steps[step];
+        var key = activeTour[step].ElementKey;
 
         // Components may register spotlight refs slightly after first paint.
         for (var attempt = 0; attempt < 10; attempt++)
@@ -133,7 +150,7 @@
     {
         step++;
 
-        if (step >= steps.Length)
+        if (step >= activeTour.Count)
         {
             await ExitTour();
             return;
@@ -158,20 +175,31 @@
     // -------------------------
     private string GetText(int step)
     {
-        return step switch
+        if (step < 0 || step >= activeTour.Count)
         {
-            0 => "Use the level selector to switch between levels and track your progress.",
-            1 => "You can erase your progress for specific levels here if you want to revise them.",
-            2 => "Save your current Blockly workspace to a file so you can reload it later.",
-            3 => "Load a previously saved Blockly workspace from a file.",
-            4 => "Reset the Blockly workspace back to its starting state.",
-            5 => "Compile your Blockly program so it can run in WRAMP.",
-            6 => "Download the Blockly program as WRAMP code.",
-            7 => "Undo the last instruction executed in your program.",
-            8 => "Run the program continuously from the current state.",
-            9 => "Step through the program one instruction at a time.",
-            _ => ""
-        };
+            return string.Empty;
+        }
+
+        return activeTour[step].Description;
+    }
+
+    private bool HasTour => activeTour.Count > 0;
+
+    private async Task LoadTours()
+    {
+        var loadedTours = await Http.GetFromJsonAsync<Dictionary<string, List<TourStep>>>("data/guidedTours.json");
+        tours = loadedTours ?? new Dictionary<string, List<TourStep>>();
+    }
+
+    private void SetActiveTour()
+    {
+        if (!tours.TryGetValue(TourKey, out var selectedTour) || selectedTour == null)
+        {
+            activeTour = new List<TourStep>();
+            return;
+        }
+
+        activeTour = selectedTour;
     }
 
     // -------------------------

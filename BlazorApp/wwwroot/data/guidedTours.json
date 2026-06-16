@@ -1,0 +1,50 @@
+{
+  "introductionTour": [
+    {
+      "elementKey": "levelSelect",
+      "description": "Use the level selector to switch between levels and track your progress."
+    },
+    {
+      "elementKey": "resetLevelButton",
+      "description": "You can erase your progress for specific levels here if you want to revise them."
+    },
+    {
+      "elementKey": "saveWorkspace",
+      "description": "Save your current Blockly workspace to a file so you can reload it later."
+    },
+    {
+      "elementKey": "loadWorkspace",
+      "description": "Load a previously saved Blockly workspace from a file."
+    },
+    {
+      "elementKey": "resetWorkspace",
+      "description": "Reset the Blockly workspace back to its starting state."
+    },
+    {
+      "elementKey": "compileButton",
+      "description": "Compile your Blockly program so it can run in WRAMP."
+    },
+    {
+      "elementKey": "downloadCodeButton",
+      "description": "Download the Blockly program as WRAMP code."
+    },
+    {
+      "elementKey": "undoButton",
+      "description": "Undo the last instruction executed in your program."
+    },
+    {
+      "elementKey": "runButton",
+      "description": "Run the program continuously from the current state."
+    },
+    {
+      "elementKey": "stepButton",
+      "description": "Step through the program one instruction at a time."
+    }
+  ],
+  "parallelRegistersHighlight":[
+    {
+      "elementKey": "parallelRegisters",
+      "description": "Click here to inspect the parallel registers."
+    }
+  ]
+}
