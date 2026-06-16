@@ -17,8 +17,8 @@
     private string? previousMaskingCode;
     private const string ExpectedMaskingMessage = "hello";
     private const string ExpectedMaskingSerialOutput = "HELLO";
-    public UIComponents shiftingComponents = new UIComponents(Blockly: true, Code: true, SSDs: true, Switches: true, LEDs: true, GPRegisters: true, ParallelRegisters: true);
-    public UIComponents maskingComponents = new UIComponents(Blockly: true, Code: true, SSDs: true, Switches: true, LEDs: true, GPRegisters: true, ParallelRegisters: true, SerialPort: true);
+    public UIComponents shiftingComponents = new UIComponents(Blockly: true, Code: true, SSDs: true, Switches: true, LEDs: true, GPRegisters: true, ParallelRegisters: true, Visualiser: true);
+    public UIComponents maskingComponents = new UIComponents(Blockly: true, Code: true, SSDs: true, Switches: true, LEDs: true, GPRegisters: true, ParallelRegisters: true, SerialPort: true, Visualiser: true);
     public Toolbox shiftingToolbox = new Toolbox
     {
         contents = new List<Category>() {
