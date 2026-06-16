@@ -4,7 +4,7 @@
 
 @if (IsSelectedLevel() && Steps.Count > 0)
 {
-    <LevelChecklistDropdown Steps="@Steps" />
+    <LevelChecklistDropdown Steps="@Steps" LevelId="@LevelId" SelectedStepIndex="@SelectedStepIndex" />
 }
 
 @code {
@@ -16,6 +16,12 @@
 
     [Parameter]
     public IReadOnlyList<ChecklistStep> Steps { get; set; } = [];
+
+    [Parameter]
+    public string LevelId { get; set; } = string.Empty;
+
+    [Parameter]
+    public int SelectedStepIndex { get; set; } = -1;
 
     private bool IsSelectedLevel()
     {

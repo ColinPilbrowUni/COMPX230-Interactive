@@ -1,25 +1,39 @@
+@inject ChecklistStateStore ChecklistState
+
 <li class="checklist-dropdown">
     <div class="checklist">
-        @foreach (var step in Steps)
+        @for (int i = 0; i < Steps.Count; i++)
         {
+            int stepIndex = i;
+            ChecklistStep step = Steps[i];
             var statusClass = GetStatusClass(step.Status);
+            bool isSelectable = IsStepSelectable(step.Status);
+            string selectedClass = stepIndex == SelectedStepIndex ? "selected" : string.Empty;
 
-            <div class="checklist-item @statusClass">
-                <div class="checklist-indicator @statusClass">
-                    @if (step.Status == ChecklistStepStatus.Complete)
-                    {
-                        <span class="checkmark">✓</span>
-                    }
-                </div>
-                @if (step.Status == ChecklistStepStatus.Current || step.Status == ChecklistStepStatus.Complete)
-                {
+            @if (isSelectable)
+            {
+                <button type="button" class="checklist-item checklist-item-button @statusClass @selectedClass" @onclick="() => HandleStepSelected(stepIndex)">
+                    <div class="checklist-indicator @statusClass">
+                        @if (step.Status == ChecklistStepStatus.Complete)
+                        {
+                            <span class="checkmark">✓</span>
+                        }
+                    </div>
                     <span class="checklist-label"><strong>@step.Label</strong></span>
-                }
-                else
-                {
+                </button>
+            }
+            else
+            {
+                <div class="checklist-item @statusClass @selectedClass">
+                    <div class="checklist-indicator @statusClass">
+                        @if (step.Status == ChecklistStepStatus.Complete)
+                        {
+                            <span class="checkmark">✓</span>
+                        }
+                    </div>
                     <span class="checklist-label">@step.Label</span>
-                }
-            </div>
+                </div>
+            }
         }
     </div>
 </li>
@@ -28,8 +42,29 @@
     [Parameter]
     public IReadOnlyList<ChecklistStep> Steps { get; set; } = [];
 
+    [Parameter]
+    public string LevelId { get; set; } = string.Empty;
+
+    [Parameter]
+    public int SelectedStepIndex { get; set; } = -1;
+
     private static string GetStatusClass(ChecklistStepStatus status)
     {
         return status.ToString().ToLowerInvariant();
+    }
+
+    private static bool IsStepSelectable(ChecklistStepStatus status)
+    {
+        return status == ChecklistStepStatus.Started || status == ChecklistStepStatus.Complete;
+    }
+
+    private void HandleStepSelected(int stepIndex)
+    {
+        if (string.IsNullOrWhiteSpace(LevelId))
+        {
+            return;
+        }
+
+        ChecklistState.RequestSectionSelection(LevelId, stepIndex);
     }
 }

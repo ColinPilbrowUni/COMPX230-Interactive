@@ -1,6 +1,7 @@
 public sealed class ChecklistStateStore
 {
     private readonly Dictionary<string, List<ChecklistStep>> levels = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> selectedStepIndices = new(StringComparer.OrdinalIgnoreCase);
 
     public ChecklistStateStore()
     {
@@ -8,10 +9,12 @@ public sealed class ChecklistStateStore
     }
 
     public event Action? StateChanged;
+    public event Action<string, int, ChecklistStepStatus>? SectionSelectionRequested;
 
     public void ResetToDefaults()
     {
         levels.Clear();
+        selectedStepIndices.Clear();
         DefineLevel("levelFour", ["Shifting", "Masking"], currentStepLabel: "Shifting");
         NotifyStateChanged();
     }
@@ -37,6 +40,7 @@ public sealed class ChecklistStateStore
             .Select(label => new ChecklistStep(label, ChecklistStepStatus.Incomplete))
             .ToList();
 
+        int initialSelectedStepIndex = 0;
         if (currentStepLabel != null)
         {
             int currentStepIndex = steps.FindIndex(step => string.Equals(step.Label, currentStepLabel, StringComparison.OrdinalIgnoreCase));
@@ -45,10 +49,12 @@ public sealed class ChecklistStateStore
                 throw new KeyNotFoundException($"Step '{currentStepLabel}' does not exist in level '{levelId}'.");
             }
 
-            steps[currentStepIndex] = steps[currentStepIndex] with { Status = ChecklistStepStatus.Current };
+            steps[currentStepIndex] = steps[currentStepIndex] with { Status = ChecklistStepStatus.Started };
+            initialSelectedStepIndex = currentStepIndex;
         }
 
         levels[levelId] = steps;
+        selectedStepIndices[levelId] = initialSelectedStepIndex;
         NotifyStateChanged();
     }
 
@@ -74,6 +80,39 @@ public sealed class ChecklistStateStore
         return foundSteps.ToArray();
     }
 
+    public bool TryGetSelectedStepIndex(string levelId, out int selectedStepIndex)
+    {
+        if (selectedStepIndices.TryGetValue(levelId, out int index))
+        {
+            selectedStepIndex = index;
+            return true;
+        }
+
+        selectedStepIndex = 0;
+        return false;
+    }
+
+    public void SetSelectedStepIndex(string levelId, int stepIndex)
+    {
+        if (!levels.TryGetValue(levelId, out List<ChecklistStep>? steps))
+        {
+            throw new KeyNotFoundException($"Level '{levelId}' was not found.");
+        }
+
+        if (stepIndex < 0 || stepIndex >= steps.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(stepIndex));
+        }
+
+        if (selectedStepIndices.TryGetValue(levelId, out int currentIndex) && currentIndex == stepIndex)
+        {
+            return;
+        }
+
+        selectedStepIndices[levelId] = stepIndex;
+        NotifyStateChanged();
+    }
+
     public void Set(string levelId, string stepLabel, ChecklistStepStatus status)
     {
         if (!levels.TryGetValue(levelId, out List<ChecklistStep>? steps))
@@ -94,6 +133,29 @@ public sealed class ChecklistStateStore
 
         steps[stepIndex] = steps[stepIndex] with { Status = status };
         NotifyStateChanged();
+    }
+
+    public bool RequestSectionSelection(string levelId, int stepIndex)
+    {
+        if (!levels.TryGetValue(levelId, out List<ChecklistStep>? steps))
+        {
+            return false;
+        }
+
+        if (stepIndex < 0 || stepIndex >= steps.Count)
+        {
+            return false;
+        }
+
+        ChecklistStepStatus status = steps[stepIndex].Status;
+        if (status == ChecklistStepStatus.Incomplete)
+        {
+            return false;
+        }
+
+        SetSelectedStepIndex(levelId, stepIndex);
+        SectionSelectionRequested?.Invoke(levelId, stepIndex, status);
+        return true;
     }
 
     private void NotifyStateChanged()

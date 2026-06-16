@@ -3,6 +3,7 @@
 @using System.Text.Json
 @inject IJSRuntime JSRuntime
 @inject ChecklistStateStore ChecklistState
+@implements IDisposable
 
 <Level @ref="levelComponent" Title="#4" BoardChanged="CheckBoard" UIComponents="@CurrentComponents" Toolbox="@CurrentToolbox" WSIMInstructions="@Instructions" MainInstructions=null startingWorkspace="@CurrentStartingWorkspace" maxInstances="@maxInstances" />
 
@@ -100,6 +101,11 @@
     public Toolbox CurrentToolbox => phase == LevelFourPhase.Shifting ? shiftingToolbox : maskingToolbox;
     public UIComponents CurrentComponents => phase == LevelFourPhase.Shifting ? shiftingComponents : maskingComponents;
 
+    protected override void OnInitialized()
+    {
+        ChecklistState.SectionSelectionRequested += HandleSectionSelectionRequested;
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -115,6 +121,7 @@
 
             int savedPhase = await JSRuntime.InvokeAsync<int>("getProgress", "Phase");
             phase = savedPhase == 1 ? LevelFourPhase.Masking : LevelFourPhase.Shifting;
+            ChecklistState.SetSelectedStepIndex("levelFour", (int)phase);
 
             SyncChecklistState();
             await ApplySectionConfig();
@@ -127,6 +134,61 @@
     public bool stepTwo = false;
     public bool maskingStepOne = false;
     public bool maskingStepTwo = false;
+
+    private void HandleSectionSelectionRequested(string levelId, int stepIndex, ChecklistStepStatus status)
+    {
+        if (!string.Equals(levelId, "levelFour", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            await ApplyChecklistSectionSelection(stepIndex, status);
+        });
+    }
+
+    private async Task ApplyChecklistSectionSelection(int stepIndex, ChecklistStepStatus status)
+    {
+        if (stepIndex == (int)LevelFourPhase.Shifting)
+        {
+            phase = LevelFourPhase.Shifting;
+            if (status == ChecklistStepStatus.Complete)
+            {
+                lc.Section = 2;
+                stepOne = true;
+                stepTwo = true;
+            }
+            else
+            {
+                lc.Section = stepOne ? 1 : 0;
+            }
+        }
+        else if (stepIndex == (int)LevelFourPhase.Masking)
+        {
+            phase = LevelFourPhase.Masking;
+            if (status == ChecklistStepStatus.Complete)
+            {
+                lc.Section = 2;
+                maskingStepOne = true;
+                maskingStepTwo = true;
+            }
+            else
+            {
+                lc.Section = maskingStepOne ? 1 : 0;
+            }
+        }
+        else
+        {
+            return;
+        }
+
+        await JSRuntime.InvokeVoidAsync("storeProgress", "Phase", (int)phase);
+        ChecklistState.SetSelectedStepIndex("levelFour", (int)phase);
+        await ApplySectionConfig();
+        await CheckBoard();
+        StateHasChanged();
+    }
 
     public async Task CheckBoard()
     {
@@ -143,8 +205,12 @@
             bool regTwoIsDoubleSwitches = WSIM.Verify(new BoardCheck(WRAMPComponents.GPRegisters, switchValue * 2, 2));
 
             // Require a non-zero switch setting so the objective does not auto-complete at reset state.
-            stepOne = switchValue != 0 && regOneMatchesSwitches;
-            stepTwo = switchValue != 0 && stepOne && regTwoIsDoubleSwitches;
+            bool shiftingStepOneNow = switchValue != 0 && regOneMatchesSwitches;
+            bool shiftingStepTwoNow = switchValue != 0 && shiftingStepOneNow && regTwoIsDoubleSwitches;
+
+            // Once complete, stay complete until reset.
+            stepOne = stepOne || shiftingStepOneNow;
+            stepTwo = stepTwo || shiftingStepTwoNow;
 
             if (stepOne && lc.Section == 0)
             {
@@ -168,8 +234,12 @@
             bool dataSectionUnaltered = IsMaskingDataSectionUnaltered(userCode);
             bool serialOutputMatches = board.Serial1.serialText == ExpectedMaskingSerialOutput;
 
-            maskingStepOne = lc.Section >= 1 || answeredMaskingQuestionOne;
-            maskingStepTwo = lc.Section >= 2 || (maskingStepOne && serialOutputMatches && dataSectionUnaltered);
+            bool maskingStepOneNow = lc.Section >= 1 || answeredMaskingQuestionOne;
+            bool maskingStepTwoNow = lc.Section >= 2 || (maskingStepOneNow && serialOutputMatches && dataSectionUnaltered);
+
+            // Once complete, stay complete until reset.
+            maskingStepOne = maskingStepOne || maskingStepOneNow;
+            maskingStepTwo = maskingStepTwo || maskingStepTwoNow;
 
             if (maskingStepOne && lc.Section == 0)
             {
@@ -207,7 +277,8 @@
         maskingStepTwo = false;
 
         ChecklistState.Set("levelFour", "Shifting", ChecklistStepStatus.Complete);
-        ChecklistState.Set("levelFour", "Masking", ChecklistStepStatus.Current);
+        ChecklistState.Set("levelFour", "Masking", ChecklistStepStatus.Started);
+        ChecklistState.SetSelectedStepIndex("levelFour", (int)phase);
         lc.UncheckAllObjectives();
         await ApplySectionConfig();
         await CheckBoard();
@@ -323,18 +394,47 @@
     {
         if (phase == LevelFourPhase.Shifting)
         {
-            ChecklistState.Set("levelFour", "Shifting", lc.Section >= 2 ? ChecklistStepStatus.Complete : ChecklistStepStatus.Current);
-            ChecklistState.Set("levelFour", "Masking", lc.Section >= 2 ? ChecklistStepStatus.Current : ChecklistStepStatus.Incomplete);
+            SetChecklistStatusWithoutDowngrade("Shifting", lc.Section >= 2 ? ChecklistStepStatus.Complete : ChecklistStepStatus.Started);
+            SetChecklistStatusWithoutDowngrade("Masking", lc.Section >= 2 ? ChecklistStepStatus.Started : ChecklistStepStatus.Incomplete);
+            ChecklistState.SetSelectedStepIndex("levelFour", (int)phase);
             return;
         }
 
-        ChecklistState.Set("levelFour", "Shifting", ChecklistStepStatus.Complete);
-        ChecklistState.Set("levelFour", "Masking", lc.Section >= 2 ? ChecklistStepStatus.Complete : ChecklistStepStatus.Current);
+        SetChecklistStatusWithoutDowngrade("Shifting", ChecklistStepStatus.Complete);
+        SetChecklistStatusWithoutDowngrade("Masking", lc.Section >= 2 ? ChecklistStepStatus.Complete : ChecklistStepStatus.Started);
+        ChecklistState.SetSelectedStepIndex("levelFour", (int)phase);
+    }
+
+    private void SetChecklistStatusWithoutDowngrade(string stepLabel, ChecklistStepStatus desiredStatus)
+    {
+        ChecklistStepStatus currentStatus = GetChecklistStepStatus(stepLabel);
+        if (desiredStatus < currentStatus)
+        {
+            return;
+        }
+
+        ChecklistState.Set("levelFour", stepLabel, desiredStatus);
+    }
+
+    private ChecklistStepStatus GetChecklistStepStatus(string stepLabel)
+    {
+        if (!ChecklistState.TryGetSteps("levelFour", out IReadOnlyList<ChecklistStep>? steps))
+        {
+            return ChecklistStepStatus.Incomplete;
+        }
+
+        ChecklistStep? step = steps.FirstOrDefault(s => string.Equals(s.Label, stepLabel, StringComparison.OrdinalIgnoreCase));
+        return step?.Status ?? ChecklistStepStatus.Incomplete;
     }
 
     private enum LevelFourPhase
     {
         Shifting = 0,
         Masking = 1
+    }
+
+    public void Dispose()
+    {
+        ChecklistState.SectionSelectionRequested -= HandleSectionSelectionRequested;
     }
 }

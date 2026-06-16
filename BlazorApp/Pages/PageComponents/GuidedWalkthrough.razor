@@ -60,6 +60,7 @@
 
     private Dictionary<string, List<TourStep>> tours = new Dictionary<string, List<TourStep>>();
     private List<TourStep> activeTour = new List<TourStep>();
+    private Dictionary<int, bool> collapseShownAtTourStart = new Dictionary<int, bool>();
     private DotNetObjectReference<GuidedWalkthrough>? escCallbackReference;
 
     private Rect? rect;
@@ -114,6 +115,16 @@
         if (!HasTour)
         {
             return;
+        }
+
+        collapseShownAtTourStart.Clear();
+        for (int i = 0; i < activeTour.Count; i++)
+        {
+            var tourStep = activeTour[i];
+            if (tourStep.Check == "collapse" && Registry.TryGet(tourStep.ElementKey, out var collapseTrigger))
+            {
+                collapseShownAtTourStart[i] = await JS.InvokeAsync<bool>("isCollapseShown", collapseTrigger);
+            }
         }
 
         step = 0;
@@ -209,9 +220,16 @@
 
         var currentStep = activeTour[step];
 
-        if (currentStep.Check == "tab" && Registry.TryGet(currentStep.ElementKey, out var element))
+        if (currentStep.Check == "tab" && Registry.TryGet(currentStep.ElementKey, out var tabElement))
         {
-            await JS.InvokeVoidAsync("activateTab", element);
+            await JS.InvokeVoidAsync("activateTab", tabElement);
+        }
+        else if (currentStep.Check == "collapse" && Registry.TryGet(currentStep.ElementKey, out var collapseElement))
+        {
+            if (!collapseShownAtTourStart.TryGetValue(step, out var wasShownAtStart) || !wasShownAtStart)
+            {
+                await JS.InvokeVoidAsync("showCollapse", collapseElement);
+            }
         }
 
         await Next();

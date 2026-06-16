@@ -37,3 +37,61 @@ window.activateTab = (el) => {
     const tab = bootstrap.Tab.getOrCreateInstance(el);
     tab.show();
 };
+
+window.activateCollapse = (el) => {
+    if (!el) return;
+
+    const targetSelector = el.getAttribute('data-bs-target');
+    const targetId = el.getAttribute('aria-controls');
+    const target =
+        (targetSelector ? document.querySelector(targetSelector) : null) ||
+        (targetId ? document.getElementById(targetId) : null);
+
+    if (!target) return;
+
+    const collapse = bootstrap.Collapse.getOrCreateInstance(target, { toggle: false });
+    collapse.toggle();
+};
+
+window.isCollapseShown = (el) => {
+    if (!el) return false;
+
+    const targetSelector = el.getAttribute('data-bs-target');
+    const targetId = el.getAttribute('aria-controls');
+    const target =
+        (targetSelector ? document.querySelector(targetSelector) : null) ||
+        (targetId ? document.getElementById(targetId) : null);
+
+    if (!target) return false;
+    return target.classList.contains('show');
+};
+
+window.showCollapse = (el) => {
+    if (!el) return;
+
+    const targetSelector = el.getAttribute('data-bs-target');
+    const targetId = el.getAttribute('aria-controls');
+    const target =
+        (targetSelector ? document.querySelector(targetSelector) : null) ||
+        (targetId ? document.getElementById(targetId) : null);
+
+    if (!target) return;
+
+    const collapse = bootstrap.Collapse.getOrCreateInstance(target, { toggle: false });
+    collapse.show();
+};
+
+window.hideCollapse = (el) => {
+    if (!el) return;
+
+    const targetSelector = el.getAttribute('data-bs-target');
+    const targetId = el.getAttribute('aria-controls');
+    const target =
+        (targetSelector ? document.querySelector(targetSelector) : null) ||
+        (targetId ? document.getElementById(targetId) : null);
+
+    if (!target) return;
+
+    const collapse = bootstrap.Collapse.getOrCreateInstance(target, { toggle: false });
+    collapse.hide();
+};

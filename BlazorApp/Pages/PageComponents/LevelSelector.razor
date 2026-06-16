@@ -16,7 +16,7 @@
             <LevelNavItem href="levelOne" name="#1" Steps="@NoSteps" />
             <LevelNavItem href="levelTwo" name="#2" Steps="@NoSteps" />
             <LevelNavItem href="levelBranching" name="Branching" Steps="@NoSteps" />
-            <LevelNavItem href="levelFour" name="#4" Steps='@GetLevelSteps("levelFour")' />
+            <LevelNavItem href="levelFour" name="#4" Steps='@GetLevelSteps("levelFour")' LevelId="levelFour" SelectedStepIndex='@GetSelectedStepIndex("levelFour")' />
 
             <button class="btn btn-danger float-end my-2 ms-4" @onclick="ResetLevels" data-bs-toggle="modal" data-bs-target="#deleteModal" @ref="resetLevelButtonRef"> 
                 Reset Level Progress
@@ -60,6 +60,16 @@
         return NoSteps;
     }
 
+    private int GetSelectedStepIndex(string levelId)
+    {
+        if (ChecklistState.TryGetSelectedStepIndex(levelId, out int selectedStepIndex))
+        {
+            return selectedStepIndex;
+        }
+
+        return -1;
+    }
+
     private void HandleChecklistStateChanged()
     {
         InvokeAsync(StateHasChanged);
@@ -99,6 +109,17 @@
     transition: background-color 0.2s;
 }
 
+.checklist-item-button {
+    width: 100%;
+    border: 0;
+    text-align: left;
+    background: transparent;
+}
+
+.checklist-item-button:hover {
+    background-color: rgba(108, 117, 125, 0.18);
+}
+
 .checklist-item.incomplete {
     color: var(--bs-body-color);
 }
@@ -126,7 +147,7 @@
     line-height: 1;
 }
 
-.checklist-indicator.current {
+.checklist-indicator.started {
     background-color: #6c757d;
     border: 2px solid #6c757d;
 }
@@ -137,8 +158,8 @@
     opacity: 0.6;
 }
 
-.checklist-item.current {
-    background-color: rgba(108, 117, 125, 0.1);
+.checklist-item.selected {
+    background-color: rgba(108, 117, 125, 0.22);
 }
 
 .checklist-label {

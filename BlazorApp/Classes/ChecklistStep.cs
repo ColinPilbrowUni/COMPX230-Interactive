@@ -1,7 +1,7 @@
 public enum ChecklistStepStatus
 {
     Incomplete,
-    Current,
+    Started,
     Complete
 }
 

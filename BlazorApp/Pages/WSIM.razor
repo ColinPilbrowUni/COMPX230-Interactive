@@ -30,7 +30,7 @@
         <div class="accordion my-2">
             <div class="accordion-item">
                 <h2 class="accordion-header">
-                    <button class="accordion-button collapsed text-end" type="button" data-bs-toggle="collapse" data-bs-target="#physicalComponents" aria-expanded="false" aria-controls="physicalComponents">
+                    <button class="accordion-button collapsed text-end" type="button" data-bs-toggle="collapse" data-bs-target="#physicalComponents" aria-expanded="false" aria-controls="physicalComponents" @ref="physicalComponentsTabRef">
                         Physical Components
                     </button>
                 </h2>
@@ -237,6 +237,7 @@
     private ElementReference parallelTabRef;
     private ElementReference serialTabRef;
     private ElementReference libraryTabRef;
+    private ElementReference physicalComponentsTabRef;
 
     public enum ExceptionSource { GPF = 0x1000, SYSCALL = 0x2000, BREAK = 0x4000, ARITH = 0x8000 }
 
@@ -295,6 +296,7 @@
         if (UIComponents.ParallelRegisters) SpotlightRegistry.Register("parallelRegisters", parallelTabRef);
         if (UIComponents.SerialPort) SpotlightRegistry.Register("serialPort", serialTabRef);
         if (Library != null && Library[0] != "libraryName.s") SpotlightRegistry.Register("libraryTab", libraryTabRef);
+        if (UIComponents.LEDs || UIComponents.SSDs || UIComponents.Switches) SpotlightRegistry.Register("physicalComponentsTab", physicalComponentsTabRef);
 
         if (firstRender)
         {

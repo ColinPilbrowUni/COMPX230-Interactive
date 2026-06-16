@@ -54,5 +54,12 @@
       "description": "Click here to inspect the serial port output. This is where the output of the starter program will appear.",
       "check": "tab"
     }
+  ],
+  "physicalComponentsHighlight":[
+    {
+      "elementKey": "physicalComponentsTab",
+      "description": "Click here to inspect the physical components.",
+      "check": "collapse"
+    }
   ]
 }
