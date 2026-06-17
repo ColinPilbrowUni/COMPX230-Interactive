@@ -87,6 +87,17 @@
 
     private bool needVisualiseUpdate = false;
 
+    private bool CanVisualiseCurrentInstruction()
+    {
+        if (CodeStatements?.Count() <= Board.CPU.PC)
+        {
+            return false;
+        }
+
+        string instruction = ir.ToString();
+        return Regex.IsMatch(instruction, shiftRegex) || Regex.IsMatch(instruction, arithmeticRegex);
+    }
+
     void changeFormat(string id)
     {
         JSRuntime.InvokeVoidAsync("changeFormat", id, ir.ToString());
@@ -177,6 +188,11 @@
         if (!needVisualiseUpdate) return;
         needVisualiseUpdate = false;
 
+        if (!CanVisualiseCurrentInstruction())
+        {
+            return;
+        }
+
         @* Sign *@
         await JSRuntime.InvokeVoidAsync("updateSign", ir.ToString());
 
@@ -194,7 +210,8 @@
         }
 
         @* Rd *@
-        if (Regex.IsMatch(ir.ToString(), arithmeticRegex))
+        bool isShiftOperation = ir.Func == IR.Function.sll || ir.Func == IR.Function.srl || ir.Func == IR.Function.sra;
+        if (!isShiftOperation)
         {
             await JSRuntime.InvokeVoidAsync("updateVisualiser", "visualiseDest", FormatBinary32(GetArithmeticResult()));
         }
