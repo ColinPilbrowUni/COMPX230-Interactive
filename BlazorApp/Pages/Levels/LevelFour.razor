@@ -15,6 +15,8 @@
     private LevelFourPhase phase = LevelFourPhase.Shifting;
     private string maskingMessageGuess = "";
     private string? previousMaskingCode;
+    private const string ShiftingBlocklyStorageKey = "levelFourShiftingBlockly";
+    private const string MaskingBlocklyStorageKey = "levelFourMaskingBlockly";
     private const string ExpectedMaskingMessage = "hello";
     private const string ExpectedMaskingSerialOutput = "HELLO";
     public UIComponents shiftingComponents = new UIComponents(Blockly: true, Code: true, SSDs: true, Switches: true, LEDs: true, GPRegisters: true, ParallelRegisters: true, Visualiser: true);
@@ -296,12 +298,12 @@
         if (phase == LevelFourPhase.Shifting)
         {
             await lc.UpdateToolbox(shiftingToolbox);
-            await JSRuntime.InvokeVoidAsync("loadPresetWorkspace", shiftingStartingWorkspace);
+            await JSRuntime.InvokeVoidAsync("loadSavedOrPresetWorkspace", ShiftingBlocklyStorageKey, shiftingStartingWorkspace);
             return;
         }
 
         await lc.UpdateToolbox(maskingToolbox);
-        await JSRuntime.InvokeVoidAsync("loadPresetWorkspace", maskingStartingWorkspace);
+        await JSRuntime.InvokeVoidAsync("loadSavedOrPresetWorkspace", MaskingBlocklyStorageKey, maskingStartingWorkspace);
     }
 
     public RenderFragment Instructions =>

@@ -223,6 +223,9 @@
     [Parameter]
     public string[]? Library { get; set; }
 
+    [Parameter]
+    public bool prependLibrary { get; set; } = false;
+
     private ElementReference compileButtonRef;
     private ElementReference downloadCodeButtonRef;
     private ElementReference undoButtonRef;
@@ -374,7 +377,7 @@
 
             @* Add the library code onto any user code and the EQU lines *@
             string libraryCode = Regex.Replace(Library[1], htmlTags, String.Empty);
-            string combinedCode = codeWithEQUs + "\n" + libraryCode;
+            string combinedCode = prependLibrary ? libraryCode + "\n" + codeWithEQUs : codeWithEQUs + "\n" + libraryCode;
             codeBytes = Encoding.UTF8.GetBytes(combinedCode);
 
             //Get the labels from the library code

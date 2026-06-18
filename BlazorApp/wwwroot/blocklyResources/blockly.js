@@ -1050,6 +1050,37 @@ window.loadPresetWorkspace = (workspaceJSON) =>
     localStorage.removeItem(blocklyStorage);
 }
 
+window.setBlocklyStorageKey = (storageKey) =>
+{
+    blocklyStorage = storageKey;
+}
+
+window.loadSavedOrPresetWorkspace = (storageKey, workspaceJSON) =>
+{
+    if (storageKey != null)
+    {
+        blocklyStorage = storageKey;
+    }
+
+    presetWorkspace = workspaceJSON;
+
+    // Keep presetCode anchored to the starter workspace so reset/save logic remains correct.
+    let presetCodeWorkspace = new Blockly.Workspace();
+    Blockly.serialization.workspaces.load(JSON.parse(workspaceJSON), presetCodeWorkspace);
+    presetCode = wrampGenerator.workspaceToCode(presetCodeWorkspace);
+    presetCodeWorkspace.dispose();
+
+    let savedWorkspace = localStorage.getItem(blocklyStorage);
+    if (savedWorkspace != null)
+    {
+        loadWorkspace(savedWorkspace);
+    }
+    else
+    {
+        loadWorkspace(workspaceJSON);
+    }
+}
+
 window.updateToolbox = (toolbox) =>
 {
     workspace.updateToolbox(JSON.parse(toolbox));
