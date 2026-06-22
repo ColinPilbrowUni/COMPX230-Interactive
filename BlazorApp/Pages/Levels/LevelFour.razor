@@ -234,11 +234,10 @@
             string userCode = await lc.GetUserCode();
             ClearSerialOutputIfCodeChanged(userCode);
             bool answeredMaskingQuestionOne = maskingMessageGuess == ExpectedMaskingMessage;
-            bool dataSectionUnaltered = IsMaskingDataSectionUnaltered(userCode);
             bool serialOutputMatches = board.Serial1.serialText == ExpectedMaskingSerialOutput;
 
             bool maskingStepOneNow = lc.Section >= 1 || answeredMaskingQuestionOne;
-            bool maskingStepTwoNow = lc.Section >= 2 || (maskingStepOneNow && serialOutputMatches && dataSectionUnaltered);
+            bool maskingStepTwoNow = lc.Section >= 2 || (maskingStepOneNow && serialOutputMatches);
 
             // Once complete, stay complete until reset.
             maskingStepOne = maskingStepOne || maskingStepOneNow;
@@ -271,16 +270,16 @@
         }
 
         phase = LevelFourPhase.Masking;
-        lc.Section = 0;
+
+        // Preserve masking progress when returning via "Next Section".
+        lc.Section = maskingStepTwo ? 2 : maskingStepOne ? 1 : 0;
         _ = JSRuntime.InvokeVoidAsync("storeProgress", "Phase", (int)phase);
 
         stepOne = false;
         stepTwo = false;
-        maskingStepOne = false;
-        maskingStepTwo = false;
 
         ChecklistState.Set("levelFour", "Shifting", ChecklistStepStatus.Complete);
-        ChecklistState.Set("levelFour", "Masking", ChecklistStepStatus.Started);
+        SetChecklistStatusWithoutDowngrade("Masking", lc.Section >= 2 ? ChecklistStepStatus.Complete : ChecklistStepStatus.Started);
         ChecklistState.SetSelectedStepIndex("levelFour", (int)phase);
         lc.UncheckAllObjectives();
         await ApplySectionConfig();
@@ -337,6 +336,7 @@
                 <h2>Masking</h2>
                 <h3>Step One <label class="inputCheckmark" id="checkmarkThree"><i class="bi bi-check-lg"></i></label></h3>
                 <p>This starter program writes a message to the <GuidedWalkthrough ButtonText="Serial Port" TourKey="serialPortHighlight"/></p>
+                <p>You can see a modifiable subroutine "check" on the blockly section on the left.</p>
                 <p>What message is it writing? Type the exact message below.</p>
                 <input id="maskingMessageInput" @oninput="OnMaskingMessageChanged" placeholder="Type the message" />
 
@@ -344,9 +344,7 @@
                 {
                     <h3>Step Two <label class="inputCheckmark" id="checkmarkFour"><i class="bi bi-check-lg"></i></label></h3>
                     <p>Now make the message uppercase in serial output.</p>
-                    <p>Tip: You only need one additional instruction added to the starting program.</p>
-                    <p><strong>WARNING: You cannot modify .data and serial output is cleared on code changing</strong>.</p>
-                    <p>Step two is complete only when serial output is exactly <code>HELLO</code> and without editing the message in .data</p>
+                    <p>Tip: You only need one additional instruction added to the "check" subroutine.</p>
                 }
 
                 @if (lc.Section >= 2)
@@ -364,15 +362,6 @@
     public string shiftingStartingWorkspace = """
     {"blocks":{"languageVersion":0,"blocks":[{"type":"textHead","id":"3X;D%#OW7i/C5Y`#lxV=","x":103,"y":56,"fields":{"instruction":".text"},"next":{"block":{"type":"global","id":"Ob+QV2P-Bfx5]-[OBWs[","fields":{"instruction":".global main"},"next":{"block":{"type":"label","id":"5[{_!6Q9!c/j+g44.{5h","fields":{"label":"main"},"next":{"block":{"type":"jumpRegister","id":"3[hkavo[E!#|I|AnROCV","fields":{"instruction":"jr","register":"$ra"}}}}}}}}]}}
     """;
-
-    @* public string maskingStartingWorkspace = """
-    {"blocks":{"languageVersion":0,"blocks":[{"type":"textHead","id":"4`u!zoj%#Y-_o,444u{)","x":93,"y":12,"fields":{"instruction":".text"},"next":{"block":{"type":"global","id":"qs/,J!K2+([(PN0LbRH:","fields":{"instruction":".global main"},"next":{"block":{"type":"label","id":"}_rsJs]h7WfPP~rBw8~-","fields":{"label":"main"},"next":{"block":{"type":"arithmeticImmediate","id":"`!%J)[C.VeyDgdSQVXrX","fields":{"instruction":"addi","register1":"$2","register2":"$0","immediate":"0"},"next":{"block":{"type":"label","id":"I|?^f#u`:12hVi[g_N{l","fields":{"label":"loop"},"next":{"block":{"type":"loadWord","id":"]{RhW9sasc4CsI0Jiw|j","fields":{"instruction":"lw","register1":"$9","offset":"hello","register2":"$2"},"next":{"block":{"type":"branchOn","id":"`01-SLlEL$xNK1XDDAhg","fields":{"instruction":"beqz","register":"$9","offset":"done"},"next":{"block":{"type":"label","id":"g05=kzp79@t#WnT|M(Qk","fields":{"label":"check"},"next":{"block":{"type":"loadWord","id":"!Y@tqHHLiYCqo7o~H)9,","fields":{"instruction":"lw","register1":"$11","offset":"0x70003","register2":"$0"},"next":{"block":{"type":"bitwiseImmediate","id":"^@b3Vl}(7_IOeEemS+bu","fields":{"instruction":"andi","register1":"$11","register2":"$11","immediate":"0x2"},"next":{"block":{"type":"branchOn","id":"$5j9/NR03D8!|k143t^V","fields":{"instruction":"beqz","register":"$11","offset":"check"},"next":{"block":{"type":"storeWord","id":"lt.q^2E{(exy}gjq~#d.","fields":{"instruction":"sw","register1":"$9","offset":"0x70000","register2":"$0"},"next":{"block":{"type":"arithmeticImmediate","id":"t!NzT`T6d[02CygZ{ce{","fields":{"instruction":"addi","register1":"$2","register2":"$2","immediate":"1"},"next":{"block":{"type":"jump","id":"xxO}vHScRW9_Gw[B(?[0","fields":{"instruction":"j","address":"loop"},"next":{"block":{"type":"label","id":"=*HrbL^T6lp*^7/9;bR0","fields":{"label":"done"},"next":{"block":{"type":"jumpRegister","id":"?U/72PEqYQ0`x+tpmPKm","fields":{"instruction":"jr","register":"$ra"},"next":{"block":{"type":"dataHead","id":"[S*5qpsZR}^nPgauFv|b","fields":{"instruction":".data"},"next":{"block":{"type":"label","id":")i_FgtwhE.7LPVB@HIpJ","fields":{"label":"hello"},"next":{"block":{"type":"asciiz","id":"8]DL!(PJ-.bz+!+qT+;k","fields":{"instruction":".asciiz ","string":"hello"}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}]}}
-    """; *@
-
-    private bool IsMaskingDataSectionUnaltered(string userCode)
-    {
-        return userCode.Contains(".asciiz  \"hello\"", StringComparison.Ordinal);
-    }
 
     private void ClearSerialOutputIfCodeChanged(string userCode)
     {
@@ -451,15 +440,15 @@
     .text
     .global main
     main:
-    addi $2, $0, 0
+    addi $2, $0, 0   # initialize $2 to value of 0, to be used as an offset into the message
     loop:
-    lw $9, message($2)
-    beqz $9, done
+    lw $9, message($2) # load the next character in the message from .data into $9
+    beqz $9, done # if the character is 0 (end of string), jump to "done"
     """ },
         new string[] { "$Blockly", "" },
         new string[] { "done.s", """
         done:
-        jr $ra
+        jr $ra 
         """},
         new string[] { "data.s", """
     .data

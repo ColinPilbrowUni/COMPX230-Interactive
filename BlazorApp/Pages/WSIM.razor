@@ -252,11 +252,11 @@
         string name = entry[0];
         if (string.Equals(name, BlocklyLibraryTag, StringComparison.Ordinal))
         {
-            return "\n#YOUR BLOCKLY CODE WILL BE INSERTED HERE\n";
+            return "\n### YOUR BLOCKLY CODE WILL BE INSERTED HERE ###\n";
         }
 
         string content = entry.Length > 1 ? entry[1] : string.Empty;
-        return $"# {name}\n{content}";
+        return $"{content}";
     }));
 
     private string CombinedNonBlocklyLibraryCode => string.Join("\n", OrderedLibraryEntries
