@@ -55,102 +55,95 @@
         string highlightBlockPattern = @"highlightBlock\('([^']+)'\)\n\t";
         string intRegex = @"[0-9]+";
 
-        if (code.Contains("main:") && code.Contains(".global main") && code.Contains(".text"))
+        //Remove highlightBlock() from any lines that aren't WRAMP instructions
+        code = Regex.Replace(code, highlightBlockPattern + @"\.text", ".text");
+        code = Regex.Replace(code, highlightBlockPattern + @"\.data", ".data");
+        code = Regex.Replace(code, highlightBlockPattern + @"\.bss", ".bss");
+        code = Regex.Replace(code, highlightBlockPattern + @"\.global main", ".global main");
+
+        //Removes highlightBlock() from labels
+        code = Regex.Replace(code, highlightBlockPattern + @"LABEL([a-zA-Z0-9_.]+):", "$2:");
+
+        //Extracts the ID of each block that can be executed in WRAMP for highlighting them in the Blockly workspace
+        string[] highlightStatements = Regex.Matches(code, highlightBlockPattern).Cast<Match>().Select(m => m.Groups[1].Value.Trim()).ToArray();
+        code = Regex.Replace(code, highlightBlockPattern, String.Empty);
+
+        //Get every label name and position for display in WSIM
+        string[] lines = code.Split(Environment.NewLine);
+        List<string> labels = new List<string>();
+
+        //Separate lists are used for each segment and then later combined since WRAMP combines all instances of a segment and then orders them as .text, .data, .bss
+        List<string> textLabels = new List<string>();
+        List<string> dataLabels = new List<string>();
+        List<string> bssLabels = new List<string>();
+
+        for (int i = 0; i < lines.Length; i++)
         {
-            //Remove highlightBlock() from any lines that aren't WRAMP instructions
-            code = Regex.Replace(code, highlightBlockPattern + @"\.text", ".text");
-            code = Regex.Replace(code, highlightBlockPattern + @"\.data", ".data");
-            code = Regex.Replace(code, highlightBlockPattern + @"\.bss", ".bss");
-            code = Regex.Replace(code, highlightBlockPattern + @"\.global main", ".global main");
-
-            //Removes highlightBlock() from labels
-            code = Regex.Replace(code, highlightBlockPattern + @"LABEL([a-zA-Z0-9_.]+):", "$2:");
-
-            //Extracts the ID of each block that can be executed in WRAMP for highlighting them in the Blockly workspace
-            string[] highlightStatements = Regex.Matches(code, highlightBlockPattern).Cast<Match>().Select(m => m.Groups[1].Value.Trim()).ToArray();
-            code = Regex.Replace(code, highlightBlockPattern, String.Empty);
-
-            //Get every label name and position for display in WSIM
-            string[] lines = code.Split(Environment.NewLine);
-            List<string> labels = new List<string>();
-
-            //Separate lists are used for each segment and then later combined since WRAMP combines all instances of a segment and then orders them as .text, .data, .bss
-            List<string> textLabels = new List<string>();
-            List<string> dataLabels = new List<string>();
-            List<string> bssLabels = new List<string>();
-
-            for (int i = 0; i < lines.Length; i++)
+            //Assign the list to be written to depending on the segment
+            switch (lines[i])
             {
-                //Assign the list to be written to depending on the segment
-                switch (lines[i])
-                {
-                    case ".text":
-                        labels = textLabels;
-                        break;
-                    case ".data":
-                        labels = dataLabels;
-                        break;
-                    case ".bss":
-                        labels = bssLabels;
-                        break;
-                    default:
-                        break;
-                }
+                case ".text":
+                    labels = textLabels;
+                    break;
+                case ".data":
+                    labels = dataLabels;
+                    break;
+                case ".bss":
+                    labels = bssLabels;
+                    break;
+                default:
+                    break;
+            }
 
-                if (Regex.IsMatch(lines[i], @"^([a-zA-Z0-9_.]+):$"))
+            if (Regex.IsMatch(lines[i], @"^([a-zA-Z0-9_.]+):$"))
+            {
+                //Remove the previous whitespace entry (if it exists) to make the position of the label match up with it's proceeding instruction
+                if (labels.Count > 1) labels.RemoveAt(labels.Count - 1);
+                labels.Add(Regex.Replace(lines[i], @"^([a-zA-Z0-9_.]+):$", "$1"));
+            }
+            //For any instructions that are initialising values in memory, add padding to the labels list for the length of the string or declared space.
+            else if (lines[i].Contains(".ascii "))
+            {
+                int length = lines[i].Length - ".ascii".Length - 3;
+                string str = lines[i].Substring(".ascii".Length + 2, length);
+                for (int i2 = 0; i2 < str.Length; i2++)
                 {
-                    //Remove the previous whitespace entry (if it exists) to make the position of the label match up with it's proceeding instruction
-                    if (labels.Count > 1) labels.RemoveAt(labels.Count - 1);
-                    labels.Add(Regex.Replace(lines[i], @"^([a-zA-Z0-9_.]+):$", "$1"));
-                }
-                //For any instructions that are initialising values in memory, add padding to the labels list for the length of the string or declared space.
-                else if (lines[i].Contains(".ascii "))
-                {
-                    int length = lines[i].Length - ".ascii".Length - 3;
-                    string str = lines[i].Substring(".ascii".Length + 2, length);
-                    for (int i2 = 0; i2 < str.Length; i2++)
-                    {
-                        labels.Add("");
-                    }
-                }
-                else if (lines[i].Contains(".asciiz"))
-                {
-                    int length = lines[i].Length - ".asciiz".Length - 3;
-                    string str = lines[i].Substring(".asciiz".Length + 2, length);
-                    for (int i2 = 0; i2 < str.Length + 1; i2++)
-                    {
-                        labels.Add("");
-                    }
-                }
-                else if (lines[i].Contains(".space"))
-                {
-                    int space = Int32.Parse(Regex.Match(lines[i], intRegex).ToString());
-                    for (int i2 = 0; i2 < space; i2++)
-                    {
-                        labels.Add("");
-                    }
-                }
-                else
-                {
-                    if (lines[i] != ".text" && lines[i] != ".data" && lines[i] != ".bss" && lines[i] != ".global main")
-                    {
-                        labels.Add("");
-                    }
+                    labels.Add("");
                 }
             }
-            //Trim extra entry for each list
-            if (textLabels.Count > 1) textLabels.RemoveAt(textLabels.Count - 1);
-            if (dataLabels.Count > 1) dataLabels.RemoveAt(dataLabels.Count - 1);
-            if (bssLabels.Count > 1) bssLabels.RemoveAt(bssLabels.Count - 1);
+            else if (lines[i].Contains(".asciiz"))
+            {
+                int length = lines[i].Length - ".asciiz".Length - 3;
+                string str = lines[i].Substring(".asciiz".Length + 2, length);
+                for (int i2 = 0; i2 < str.Length + 1; i2++)
+                {
+                    labels.Add("");
+                }
+            }
+            else if (lines[i].Contains(".space"))
+            {
+                int space = Int32.Parse(Regex.Match(lines[i], intRegex).ToString());
+                for (int i2 = 0; i2 < space; i2++)
+                {
+                    labels.Add("");
+                }
+            }
+            else
+            {
+                if (lines[i] != ".text" && lines[i] != ".data" && lines[i] != ".bss" && lines[i] != ".global main")
+                {
+                    labels.Add("");
+                }
+            }
+        }
+        //Trim extra entry for each list
+        if (textLabels.Count > 1) textLabels.RemoveAt(textLabels.Count - 1);
+        if (dataLabels.Count > 1) dataLabels.RemoveAt(dataLabels.Count - 1);
+        if (bssLabels.Count > 1) bssLabels.RemoveAt(bssLabels.Count - 1);
 
-            //Combine all segments in order for display in the RAM tab
-            labels = textLabels.Concat(dataLabels).Concat(bssLabels).ToList();
-            await Exported.InvokeAsync((code, highlightStatements, labels));
-        }
-        else
-        {
-            await JSRuntime.InvokeVoidAsync("triggerPopover", "You must declare a .text segment with global main, and a label for main!");
-        }
+        //Combine all segments in order for display in the RAM tab
+        labels = textLabels.Concat(dataLabels).Concat(bssLabels).ToList();
+        await Exported.InvokeAsync((code, highlightStatements, labels));
     }
 
     async Task saveWorkspace()

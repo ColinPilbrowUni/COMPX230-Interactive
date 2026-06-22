@@ -5,7 +5,7 @@
 @inject ChecklistStateStore ChecklistState
 @implements IDisposable
 
-<Level @ref="levelComponent" Title="Bitwise" BoardChanged="CheckBoard" UIComponents="@CurrentComponents" Toolbox="@CurrentToolbox" WSIMInstructions="@Instructions" MainInstructions=null startingWorkspace="@CurrentStartingWorkspace" maxInstances="@maxInstances" />
+<Level @ref="levelComponent" Title="Bitwise" BoardChanged="CheckBoard" UIComponents="@CurrentComponents" Toolbox="@CurrentToolbox" WSIMInstructions="@Instructions" MainInstructions=null startingWorkspace="@CurrentStartingWorkspace" maxInstances="@maxInstances" Library="@CurrentLibrary" />
 
 @code {
     public Level? levelComponent;
@@ -102,6 +102,7 @@
 
     public Toolbox CurrentToolbox => phase == LevelFourPhase.Shifting ? shiftingToolbox : maskingToolbox;
     public UIComponents CurrentComponents => phase == LevelFourPhase.Shifting ? shiftingComponents : maskingComponents;
+    public string[][]? CurrentLibrary => phase == LevelFourPhase.Masking ? Library : null;
 
     protected override void OnInitialized()
     {
@@ -364,9 +365,9 @@
     {"blocks":{"languageVersion":0,"blocks":[{"type":"textHead","id":"3X;D%#OW7i/C5Y`#lxV=","x":103,"y":56,"fields":{"instruction":".text"},"next":{"block":{"type":"global","id":"Ob+QV2P-Bfx5]-[OBWs[","fields":{"instruction":".global main"},"next":{"block":{"type":"label","id":"5[{_!6Q9!c/j+g44.{5h","fields":{"label":"main"},"next":{"block":{"type":"jumpRegister","id":"3[hkavo[E!#|I|AnROCV","fields":{"instruction":"jr","register":"$ra"}}}}}}}}]}}
     """;
 
-    public string maskingStartingWorkspace = """
+    @* public string maskingStartingWorkspace = """
     {"blocks":{"languageVersion":0,"blocks":[{"type":"textHead","id":"4`u!zoj%#Y-_o,444u{)","x":93,"y":12,"fields":{"instruction":".text"},"next":{"block":{"type":"global","id":"qs/,J!K2+([(PN0LbRH:","fields":{"instruction":".global main"},"next":{"block":{"type":"label","id":"}_rsJs]h7WfPP~rBw8~-","fields":{"label":"main"},"next":{"block":{"type":"arithmeticImmediate","id":"`!%J)[C.VeyDgdSQVXrX","fields":{"instruction":"addi","register1":"$2","register2":"$0","immediate":"0"},"next":{"block":{"type":"label","id":"I|?^f#u`:12hVi[g_N{l","fields":{"label":"loop"},"next":{"block":{"type":"loadWord","id":"]{RhW9sasc4CsI0Jiw|j","fields":{"instruction":"lw","register1":"$9","offset":"hello","register2":"$2"},"next":{"block":{"type":"branchOn","id":"`01-SLlEL$xNK1XDDAhg","fields":{"instruction":"beqz","register":"$9","offset":"done"},"next":{"block":{"type":"label","id":"g05=kzp79@t#WnT|M(Qk","fields":{"label":"check"},"next":{"block":{"type":"loadWord","id":"!Y@tqHHLiYCqo7o~H)9,","fields":{"instruction":"lw","register1":"$11","offset":"0x70003","register2":"$0"},"next":{"block":{"type":"bitwiseImmediate","id":"^@b3Vl}(7_IOeEemS+bu","fields":{"instruction":"andi","register1":"$11","register2":"$11","immediate":"0x2"},"next":{"block":{"type":"branchOn","id":"$5j9/NR03D8!|k143t^V","fields":{"instruction":"beqz","register":"$11","offset":"check"},"next":{"block":{"type":"storeWord","id":"lt.q^2E{(exy}gjq~#d.","fields":{"instruction":"sw","register1":"$9","offset":"0x70000","register2":"$0"},"next":{"block":{"type":"arithmeticImmediate","id":"t!NzT`T6d[02CygZ{ce{","fields":{"instruction":"addi","register1":"$2","register2":"$2","immediate":"1"},"next":{"block":{"type":"jump","id":"xxO}vHScRW9_Gw[B(?[0","fields":{"instruction":"j","address":"loop"},"next":{"block":{"type":"label","id":"=*HrbL^T6lp*^7/9;bR0","fields":{"label":"done"},"next":{"block":{"type":"jumpRegister","id":"?U/72PEqYQ0`x+tpmPKm","fields":{"instruction":"jr","register":"$ra"},"next":{"block":{"type":"dataHead","id":"[S*5qpsZR}^nPgauFv|b","fields":{"instruction":".data"},"next":{"block":{"type":"label","id":")i_FgtwhE.7LPVB@HIpJ","fields":{"label":"hello"},"next":{"block":{"type":"asciiz","id":"8]DL!(PJ-.bz+!+qT+;k","fields":{"instruction":".asciiz ","string":"hello"}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}]}}
-    """;
+    """; *@
 
     private bool IsMaskingDataSectionUnaltered(string userCode)
     {
@@ -439,4 +440,31 @@
     {
         ChecklistState.SectionSelectionRequested -= HandleSectionSelectionRequested;
     }
+
+    public string maskingStartingWorkspace = """ 
+    {"blocks":{"languageVersion":0,"blocks":[{"type":"label","id":"%oa;ajo!Mf:@B!Lu/~CB","x":103,"y":57,"fields":{"label":"check"},"next":{"block":{"type":"loadWord","id":"lJH:R%ak6%u#-StLmLe%","fields":{"instruction":"lw","register1":"$11","offset":"0x70003","register2":"$0"},"next":{"block":{"type":"bitwiseImmediate","id":"6W;IAy[l.9g^Q26m.e0f","fields":{"instruction":"andi","register1":"$11","register2":"$11","immediate":"0x2"},"next":{"block":{"type":"branchOn","id":"2Z*eRAf6#4-cc?S1w?-s","fields":{"instruction":"beqz","register":"$11","offset":"check"},"next":{"block":{"type":"storeWord","id":"?Teo.])C{H;jzjrF5Ucg","fields":{"instruction":"sw","register1":"$9","offset":"0x70000","register2":"$0"},"next":{"block":{"type":"arithmeticImmediate","id":"M~/FDo=K|C@VewL.DY_C","fields":{"instruction":"addi","register1":"$2","register2":"$2","immediate":"1"},"next":{"block":{"type":"jump","id":"!vmM-MyEbA6(%bj2f7e(","fields":{"instruction":"j","address":"loop"}}}}}}}}}}}}}}]}}
+    """;
+
+    public string[][] Library =
+    {
+        new string[] { "message.s", """
+    .text
+    .global main
+    main:
+    addi $2, $0, 0
+    loop:
+    lw $9, message($2)
+    beqz $9, done
+    """ },
+        new string[] { "$Blockly", "" },
+        new string[] { "done.s", """
+        done:
+        jr $ra
+        """},
+        new string[] { "data.s", """
+    .data
+    message:
+    .asciiz  "hello"
+    """ }
+    };
 }

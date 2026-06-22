@@ -18,9 +18,12 @@
 
     public string maxInstances = "{ 'global': 1}";
 
-    public string[] Library = { "libraryName.s", """
+    public string[][] Library =
+    {
+        new string[] { "libraryName.s", """
 
-    """};
+    """ }
+    };
 
     public string startingWorkspace = """
     {}

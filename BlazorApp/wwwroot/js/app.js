@@ -118,6 +118,21 @@ window.saveCode = async (Library) =>
     saveFile(code, levelID === '' ? 'sandboxCode.s' : `${levelID}Code.s`);
 }
 
+window.setWsimCode = (code) =>
+{
+    const codeArea = document.getElementById('wsimCode');
+    if (!codeArea) return;
+
+    const safeCode = (code ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
+
+    codeArea.innerHTML = safeCode
+        .replaceAll('\n', '<br>')
+        .replaceAll('\t', '&emsp;');
+}
+
 window.saveFile = async (content, name) =>
 {
     let index = name.indexOf('.');

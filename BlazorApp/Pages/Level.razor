@@ -36,7 +36,7 @@
             </div>
 
             <div class="col d-flex flex-column h-100">
-                <WSIM @ref="wsimComponent" CompileRequested="CompileHandler" BoardChanged="BoardHandler" BoardCompiled="@BoardCompiledHandler" UIComponents="@UIComponents" WSIMInstructions="@WSIMInstructions" Library="@Library" prependLibrary="@prependLibrary"/>
+                <WSIM @ref="wsimComponent" CompileRequested="CompileHandler" BoardChanged="BoardHandler" BoardCompiled="@BoardCompiledHandler" UIComponents="@UIComponents" WSIMInstructions="@WSIMInstructions" Library="@Library"/>
             </div>
         </div>
     </div>
@@ -72,10 +72,7 @@
     public EventCallback BoardCompiled { get; set; }
 
     [Parameter]
-    public string[]? Library { get; set; }
-
-    [Parameter]
-    public bool prependLibrary { get; set; } = false;
+    public string[][]? Library { get; set; }
 
     public Blockly? blocklyComponent;
     public WSIM? wsimComponent;

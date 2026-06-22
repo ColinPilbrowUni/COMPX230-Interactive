@@ -1,6 +1,7 @@
 @using RexSimulator.Hardware
 @using System.Text
 @using System.Text.RegularExpressions
+@using System.Linq
 @using RexSimulator.Hardware.Rex
 @using RexSimulator.Hardware.Wramp
 
@@ -141,10 +142,10 @@
                 <button class="nav-link" id="serial-tab" data-bs-toggle="tab" data-bs-target="#serial-tab-pane" type="button" role="tab" aria-controls="serial-tab-pane" aria-selected="false" @ref="serialTabRef">Serial Port</button>
             </li>
         }
-        @if (Library != null && Library[0] != "libraryName.s")
+        @if (DisplayLibraryEntries.Any())
         {
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="library-tab" data-bs-toggle="tab" data-bs-target="#library-tab-pane" type="button" role="tab" aria-controls="library-tab-pane" aria-selected="false" @ref="libraryTabRef">@Library[0]</button>
+                <button class="nav-link" id="library-tab" data-bs-toggle="tab" data-bs-target="#library-tab-pane" type="button" role="tab" aria-controls="library-tab-pane" aria-selected="false" @ref="libraryTabRef">@LibraryTabTitle</button>
             </li>
         }
         <li class="nav-item ms-auto" role="presentation" @onclick="quack">
@@ -195,10 +196,10 @@
                 <p>@((MarkupString)(board.Serial1.serialText.Replace("\n", "<br>")))</p>
             </div>
         }
-        @if (Library != null && Library[0] != "libraryName.s")
+        @if (DisplayLibraryEntries.Any())
         {
             <div class="tab-pane fade" id="library-tab-pane" role="tabpanel" aria-labelledby="library-tab" tabindex="0">
-                <pre>@((MarkupString)Library[1])</pre>
+                <pre>@((MarkupString)LibraryTabContent)</pre>
             </div>
         }
     </div>
@@ -221,10 +222,54 @@
     public RenderFragment? WSIMInstructions { get; set; }
 
     [Parameter]
-    public string[]? Library { get; set; }
+    public string[][]? Library { get; set; }
 
-    [Parameter]
-    public bool prependLibrary { get; set; } = false;
+    private const string BlocklyLibraryTag = "$Blockly";
+    private const string HiddenLibraryName = "libraryName.s";
+
+    private IEnumerable<string[]> OrderedLibraryEntries =>
+        Library?.Where(entry => entry != null && entry.Length > 0) ?? Enumerable.Empty<string[]>();
+
+    private IEnumerable<string[]> DisplayLibraryEntries =>
+        OrderedLibraryEntries.Where(entry =>
+            !string.Equals(entry[0], HiddenLibraryName, StringComparison.Ordinal));
+
+    private string LibraryTabTitle
+    {
+        get
+        {
+            List<string[]> displayEntries = DisplayLibraryEntries.ToList();
+            if (displayEntries.Count == 1 && !string.Equals(displayEntries[0][0], BlocklyLibraryTag, StringComparison.Ordinal))
+            {
+                return displayEntries[0][0];
+            }
+            return "Library";
+        }
+    }
+
+    private string LibraryTabContent => string.Join("\n\n", DisplayLibraryEntries.Select(entry =>
+    {
+        string name = entry[0];
+        if (string.Equals(name, BlocklyLibraryTag, StringComparison.Ordinal))
+        {
+            return "\n#YOUR BLOCKLY CODE WILL BE INSERTED HERE\n";
+        }
+
+        string content = entry.Length > 1 ? entry[1] : string.Empty;
+        return $"# {name}\n{content}";
+    }));
+
+    private string CombinedNonBlocklyLibraryCode => string.Join("\n", OrderedLibraryEntries
+        .Where(entry => !string.Equals(entry[0], BlocklyLibraryTag, StringComparison.Ordinal))
+        .Select(entry => entry.Length > 1 ? entry[1] : string.Empty));
+
+    private static bool HasRequiredProgramEntrypoint(string code)
+    {
+        bool hasTextSegment = Regex.IsMatch(code, @"(?m)^\s*\.text\b");
+        bool hasGlobalMain = Regex.IsMatch(code, @"(?m)^\s*\.global\s+main\b");
+        bool hasMainLabel = Regex.IsMatch(code, @"(?m)^\s*main\s*:");
+        return hasTextSegment && hasGlobalMain && hasMainLabel;
+    }
 
     private ElementReference compileButtonRef;
     private ElementReference downloadCodeButtonRef;
@@ -298,7 +343,7 @@
         if (UIComponents.RAM) SpotlightRegistry.Register("ramTab", ramTabRef);
         if (UIComponents.ParallelRegisters) SpotlightRegistry.Register("parallelRegisters", parallelTabRef);
         if (UIComponents.SerialPort) SpotlightRegistry.Register("serialPort", serialTabRef);
-        if (Library != null && Library[0] != "libraryName.s") SpotlightRegistry.Register("libraryTab", libraryTabRef);
+        if (DisplayLibraryEntries.Any()) SpotlightRegistry.Register("libraryTab", libraryTabRef);
         if (UIComponents.LEDs || UIComponents.SSDs || UIComponents.Switches) SpotlightRegistry.Register("physicalComponentsTab", physicalComponentsTabRef);
 
         if (firstRender)
@@ -362,6 +407,7 @@
         Reset();
 
         byte[] codeBytes;
+        string combinedCode;
         string codeWithEQUs = args.code + "\n" + EQUString;
 
         @* Get executable lines only for displaying in the Visualiser component *@
@@ -375,12 +421,34 @@
             string nonCodeTags = @".text|.data|.bss|.global main";
             string labelPattern = @"^[a-zA-Z_][a-zA-Z0-9_.]*:";
 
-            @* Add the library code onto any user code and the EQU lines *@
-            string libraryCode = Regex.Replace(Library[1], htmlTags, String.Empty);
-            string combinedCode = prependLibrary ? libraryCode + "\n" + codeWithEQUs : codeWithEQUs + "\n" + libraryCode;
-            codeBytes = Encoding.UTF8.GetBytes(combinedCode);
+            bool insertedBlocklyCode = false;
+            List<string> combinedParts = new List<string>();
+
+            foreach (string[] entry in OrderedLibraryEntries)
+            {
+                string name = entry[0];
+
+                if (string.Equals(name, BlocklyLibraryTag, StringComparison.Ordinal))
+                {
+                    combinedParts.Add(codeWithEQUs);
+                    insertedBlocklyCode = true;
+                    continue;
+                }
+
+                string content = entry.Length > 1 ? entry[1] : string.Empty;
+                combinedParts.Add(Regex.Replace(content, htmlTags, String.Empty));
+            }
+
+            // Preserve previous default behavior when no explicit $Blockly tag is provided.
+            if (!insertedBlocklyCode)
+            {
+                combinedParts.Insert(0, codeWithEQUs);
+            }
+
+            combinedCode = string.Join("\n", combinedParts);
 
             //Get the labels from the library code
+            string libraryCode = Regex.Replace(CombinedNonBlocklyLibraryCode, htmlTags, String.Empty);
             List<string> libraryLines = libraryCode.Split('\n').ToList();
             List<string> labelLines = new List<string>();
             for (int i = 0; i < libraryLines.Count - 1; i++)
@@ -402,8 +470,20 @@
         }
         else
         {
-            codeBytes = Encoding.UTF8.GetBytes(codeWithEQUs);
+            combinedCode = codeWithEQUs;
         }
+
+        // Show the exact merged source that will be validated and assembled.
+        await JSRuntime.InvokeVoidAsync("setWsimCode", combinedCode);
+
+        if (!HasRequiredProgramEntrypoint(combinedCode))
+        {
+            await JSRuntime.InvokeVoidAsync("triggerPopover", "You must declare a .text segment with global main, and a label for main!");
+            labels.Clear();
+            return;
+        }
+
+        codeBytes = Encoding.UTF8.GetBytes(combinedCode);
 
         try
         {
@@ -959,7 +1039,7 @@
 
     void saveCode()
     {
-        JSRuntime.InvokeVoidAsync("saveCode", Library?[1]);
+        JSRuntime.InvokeVoidAsync("saveCode", CombinedNonBlocklyLibraryCode);
     }
 
     [JSInvokable]
