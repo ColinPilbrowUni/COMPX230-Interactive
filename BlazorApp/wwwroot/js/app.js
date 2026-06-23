@@ -245,6 +245,18 @@ window.getLevelProgress = (levelID, type) =>
     return Number(localStorage.getItem(id)) || 0;
 }
 
+window.storeScopedProgress = (scopeID, type, value) =>
+{
+    id = scopeID + type;
+    localStorage.setItem(id, value);
+}
+
+window.getScopedProgress = (scopeID, type) =>
+{
+    id = scopeID + type;
+    return Number(localStorage.getItem(id)) || 0;
+}
+
 var popover;
 
 window.triggerPopover = (error) =>

@@ -5,6 +5,7 @@ using System.Text.Json;
 public class LevelComponents
 {
     private IJSRuntime? JSRuntime;
+    private string? progressScopeId;
 
     public LevelComponents() {}
 
@@ -13,12 +14,17 @@ public class LevelComponents
         this.JSRuntime = JSRuntime;
     }
 
+    public void SetProgressScope(string? scopeId)
+    {
+        progressScopeId = scopeId;
+    }
+
     public async Task getProgress()
     {
         if (JSRuntime != null)
         {
-            _section = await JSRuntime.InvokeAsync<int>("getProgress", "Section");
-            _block = await JSRuntime.InvokeAsync<int>("getProgress", "Block");
+            _section = await GetStoredProgress("Section");
+            _block = await GetStoredProgress("Block");
         }
 
     }
@@ -29,7 +35,7 @@ public class LevelComponents
         set
         {
             _section = value;
-            JSRuntime?.InvokeVoidAsync("storeProgress", "Section", _section);
+            StoreProgress("Section", _section);
         }
     }
 
@@ -41,7 +47,7 @@ public class LevelComponents
         set
         {
             _block = value;
-            JSRuntime?.InvokeVoidAsync("storeProgress", "Block", _block);
+            StoreProgress("Block", _block);
         }
     }
 
@@ -112,5 +118,36 @@ public class LevelComponents
         {
             await JSRuntime.InvokeVoidAsync("updateToolbox", JsonSerializer.Serialize(toolbox));
         }
+    }
+
+    private async Task<int> GetStoredProgress(string type)
+    {
+        if (JSRuntime == null)
+        {
+            return 0;
+        }
+
+        if (!string.IsNullOrWhiteSpace(progressScopeId))
+        {
+            return await JSRuntime.InvokeAsync<int>("getScopedProgress", progressScopeId, type);
+        }
+
+        return await JSRuntime.InvokeAsync<int>("getProgress", type);
+    }
+
+    private void StoreProgress(string type, int value)
+    {
+        if (JSRuntime == null)
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(progressScopeId))
+        {
+            JSRuntime.InvokeVoidAsync("storeScopedProgress", progressScopeId, type, value);
+            return;
+        }
+
+        JSRuntime.InvokeVoidAsync("storeProgress", type, value);
     }
 }

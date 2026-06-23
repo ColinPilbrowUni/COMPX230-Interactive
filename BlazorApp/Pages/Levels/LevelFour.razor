@@ -1,146 +1,86 @@
 @page "/levelFour"
 @using RexSimulator.Hardware
-@using System.Text.Json
+@using BlazorApp.Pages.Levels.LevelFourParts
 @inject IJSRuntime JSRuntime
 @inject ChecklistStateStore ChecklistState
 @implements IDisposable
 
-<Level @ref="levelComponent" Title="Bitwise" BoardChanged="CheckBoard" UIComponents="@CurrentComponents" Toolbox="@CurrentToolbox" WSIMInstructions="@Instructions" MainInstructions=null startingWorkspace="@CurrentStartingWorkspace" maxInstances="@maxInstances" Library="@CurrentLibrary" />
+<Level @ref="levelComponent" Title="Bitwise" BoardChanged="CheckBoard" UIComponents="@CurrentComponents" Toolbox="@CurrentToolbox" WSIMInstructions="@Instructions" MainInstructions=null startingWorkspace="@CurrentStartingWorkspace" maxInstances="@CurrentMaxInstances" Library="@CurrentLibrary" />
 
 @code {
     public Level? levelComponent;
-    public LevelComponents lc = new LevelComponents();
+    public LevelComponents lc = new();
     required public WSIM WSIM;
     required public RexBoard board;
-    private LevelFourPhase phase = LevelFourPhase.Shifting;
-    private string maskingMessageGuess = "";
-    private string? previousMaskingCode;
-    private const string ShiftingBlocklyStorageKey = "levelFourShiftingBlockly";
-    private const string MaskingBlocklyStorageKey = "levelFourMaskingBlockly";
-    private const string ExpectedMaskingMessage = "hello";
-    private const string ExpectedMaskingSerialOutput = "HELLO";
-    public UIComponents shiftingComponents = new UIComponents(Blockly: true, Code: true, SSDs: true, Switches: true, LEDs: true, GPRegisters: true, ParallelRegisters: true, Visualiser: true);
-    public UIComponents maskingComponents = new UIComponents(Blockly: true, Code: true, SSDs: true, Switches: true, LEDs: true, GPRegisters: true, ParallelRegisters: true, SerialPort: true, Visualiser: true);
-    public Toolbox shiftingToolbox = new Toolbox
-    {
-        contents = new List<Category>() {
-            new Category {
-                name = "Sections",
-                categorystyle = "sectionCategory",
-                contents = new List<Block>() {
-                    new Block { type = "textHead" },
-                    new Block { type = "global" }
-                }
-            },
-            new Category {
-                name = "Branch",
-                categorystyle = "branchCategory",
-                contents = new List<Block>() {
-                    new Block { type = "label" },
-                    new Block { type = "jumpRegister" },
-                    new Block { type = "jump" }
-                }
-            },
-            new Category {
-                name = "Memory",
-                categorystyle = "memoryCategory",
-                contents = new List<Block>() {
-                    new Block { type = "storeWord" },
-                    new Block { type = "loadWord" }
-                }
-            },
-            new Category {
-                name = "Logic",
-                categorystyle = "logicCategory",
-                contents = new List<Block>() {
-                    new Block { type = "bitwise" },
-                    new Block { type = "bitwiseImmediate" },
-                    new Block { type = "shift" },
-                    new Block { type = "shiftImmediate" },
-                }
-            },
-        }
-    };
 
-    public Toolbox maskingToolbox = new Toolbox
-    {
-        contents = new List<Category>() {
-            new Category {
-                name = "Sections",
-                categorystyle = "sectionCategory",
-                contents = new List<Block>() {
-                    new Block { type = "textHead" },
-                    new Block { type = "global" }
-                }
-            },
-            new Category {
-                name = "Branch",
-                categorystyle = "branchCategory",
-                contents = new List<Block>() {
-                    new Block { type = "label" },
-                    new Block { type = "jumpRegister" },
-                    new Block { type = "jump" }
-                }
-            },
-            new Category {
-                name = "Memory",
-                categorystyle = "memoryCategory",
-                contents = new List<Block>() {
-                    new Block { type = "loadWord" }
-                }
-            },
-            new Category {
-                name = "Logic",
-                categorystyle = "logicCategory",
-                contents = new List<Block>() {
-                    new Block { type = "bitwiseImmediate" },
-                    new Block { type = "shiftImmediate" }
-                }
-            }
-        }
-    };
+    private readonly Shifting shiftingPart = new();
+    private readonly Masking maskingPart = new();
+    private LevelGroupGateway gateway = default!;
+    private string maskingMessageGuess = string.Empty;
 
-    public Toolbox CurrentToolbox => phase == LevelFourPhase.Shifting ? shiftingToolbox : maskingToolbox;
-    public UIComponents CurrentComponents => phase == LevelFourPhase.Shifting ? shiftingComponents : maskingComponents;
-    public string[][]? CurrentLibrary => phase == LevelFourPhase.Masking ? Library : null;
+    private UIComponents CurrentComponents => gateway.CurrentPartIndex == 0 ? Shifting.Components : Masking.Components;
+    private Toolbox CurrentToolbox => gateway.CurrentPartIndex == 0 ? Shifting.Toolbox : Masking.Toolbox;
+    private string CurrentStartingWorkspace => gateway.CurrentPartIndex == 0 ? Shifting.StartingWorkspace : Masking.StartingWorkspace;
+    private string? CurrentMaxInstances => gateway.CurrentPartIndex == 0 ? Shifting.MaxInstances : Masking.MaxInstances;
+    private string[][]? CurrentLibrary => gateway.CurrentPartIndex == 0 ? Shifting.Library : Masking.Library;
 
     protected override void OnInitialized()
     {
+        gateway = new LevelGroupGateway("levelFour", new[] { Shifting.GroupPart, Masking.GroupPart });
         ChecklistState.SectionSelectionRequested += HandleSectionSelectionRequested;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (!firstRender)
         {
-            if (levelComponent != null && levelComponent.wsimComponent != null)
-            {
-                board = levelComponent.wsimComponent.board;
-                WSIM = levelComponent.wsimComponent;
-            }
+            return;
+        }
 
-            lc.SetJSRuntime(JSRuntime);
-            lc.Section = await JSRuntime.InvokeAsync<int>("getProgress", "Section");
+        if (levelComponent != null && levelComponent.wsimComponent != null)
+        {
+            board = levelComponent.wsimComponent.board;
+            WSIM = levelComponent.wsimComponent;
+        }
 
-            int savedPhase = await JSRuntime.InvokeAsync<int>("getProgress", "Phase");
-            phase = savedPhase == 1 ? LevelFourPhase.Masking : LevelFourPhase.Shifting;
-            ChecklistState.SetSelectedStepIndex("levelFour", (int)phase);
+        lc.SetJSRuntime(JSRuntime);
+        await MigrateLegacyProgressIfNeeded();
+        await gateway.InitializeAsync(JSRuntime, ChecklistState);
+        await ApplyCurrentPartConfig();
+        await CheckBoard();
+        StateHasChanged();
+    }
 
-            SyncChecklistState();
-            await ApplySectionConfig();
-            await CheckBoard();
-            StateHasChanged();
+    private async Task MigrateLegacyProgressIfNeeded()
+    {
+        int currentPartIndex = await JSRuntime.InvokeAsync<int>("getScopedProgress", gateway.LevelId, LevelGroupGateway.ActivePartProgressType);
+        int shiftingSection = await JSRuntime.InvokeAsync<int>("getScopedProgress", Shifting.ProgressScopeId, "Section");
+        int maskingSection = await JSRuntime.InvokeAsync<int>("getScopedProgress", Masking.ProgressScopeId, "Section");
+
+        // If scoped progress already exists, do not overwrite it.
+        if (currentPartIndex != 0 || shiftingSection != 0 || maskingSection != 0)
+        {
+            return;
+        }
+
+        int legacyPhase = await JSRuntime.InvokeAsync<int>("getLevelProgress", "levelFour", "Phase");
+        int legacySection = await JSRuntime.InvokeAsync<int>("getLevelProgress", "levelFour", "Section");
+
+        if (legacyPhase > 0)
+        {
+            await JSRuntime.InvokeVoidAsync("storeScopedProgress", gateway.LevelId, LevelGroupGateway.ActivePartProgressType, legacyPhase);
+        }
+
+        if (legacySection > 0)
+        {
+            string targetScope = legacyPhase == 1 ? Masking.ProgressScopeId : Shifting.ProgressScopeId;
+            await JSRuntime.InvokeVoidAsync("storeScopedProgress", targetScope, "Section", legacySection);
         }
     }
 
-    public bool stepOne = false;
-    public bool stepTwo = false;
-    public bool maskingStepOne = false;
-    public bool maskingStepTwo = false;
-
     private void HandleSectionSelectionRequested(string levelId, int stepIndex, ChecklistStepStatus status)
     {
-        if (!string.Equals(levelId, "levelFour", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(levelId, gateway.LevelId, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
@@ -153,44 +93,50 @@
 
     private async Task ApplyChecklistSectionSelection(int stepIndex, ChecklistStepStatus status)
     {
-        if (stepIndex == (int)LevelFourPhase.Shifting)
-        {
-            phase = LevelFourPhase.Shifting;
-            if (status == ChecklistStepStatus.Complete)
-            {
-                lc.Section = 2;
-                stepOne = true;
-                stepTwo = true;
-            }
-            else
-            {
-                lc.Section = stepOne ? 1 : 0;
-            }
-        }
-        else if (stepIndex == (int)LevelFourPhase.Masking)
-        {
-            phase = LevelFourPhase.Masking;
-            if (status == ChecklistStepStatus.Complete)
-            {
-                lc.Section = 2;
-                maskingStepOne = true;
-                maskingStepTwo = true;
-            }
-            else
-            {
-                lc.Section = maskingStepOne ? 1 : 0;
-            }
-        }
-        else
+        if (!gateway.IsValidIndex(stepIndex))
         {
             return;
         }
 
-        await JSRuntime.InvokeVoidAsync("storeProgress", "Phase", (int)phase);
-        ChecklistState.SetSelectedStepIndex("levelFour", (int)phase);
-        await ApplySectionConfig();
+        await gateway.SelectPartAsync(stepIndex, JSRuntime, ChecklistState);
+        await ApplyCurrentPartConfig();
+
+        int section = lc.Section;
+        if (gateway.CurrentPartIndex == 0)
+        {
+            shiftingPart.ApplyChecklistSelection(status, ref section);
+        }
+        else
+        {
+            maskingPart.ApplyChecklistSelection(status, ref section);
+        }
+        lc.Section = section;
+
         await CheckBoard();
         StateHasChanged();
+    }
+
+    private async Task ApplyCurrentPartConfig()
+    {
+        if (gateway.CurrentPartIndex == 0)
+        {
+            lc.SetProgressScope(Shifting.ProgressScopeId);
+            await lc.getProgress();
+            shiftingPart.RestoreProgressFromSection(lc.Section);
+            await lc.UpdateToolbox(Shifting.Toolbox);
+            await JSRuntime.InvokeVoidAsync("loadSavedOrPresetWorkspace", Shifting.BlocklyStorageKey, Shifting.StartingWorkspace);
+        }
+        else
+        {
+            lc.SetProgressScope(Masking.ProgressScopeId);
+            await lc.getProgress();
+            maskingPart.RestoreProgressFromSection(lc.Section);
+            await lc.UpdateToolbox(Masking.Toolbox);
+            await JSRuntime.InvokeVoidAsync("loadSavedOrPresetWorkspace", Masking.BlocklyStorageKey, Masking.StartingWorkspace);
+        }
+
+        ChecklistState.SetSelectedStepIndex(gateway.LevelId, gateway.CurrentPartIndex);
+        SyncChecklistState();
     }
 
     public async Task CheckBoard()
@@ -200,265 +146,102 @@
             return;
         }
 
-        uint switchValue = board.Parallel.Switches;
-
-        if (phase == LevelFourPhase.Shifting)
+        (int section, bool stepOneComplete, bool stepTwoComplete, bool triggerLevelCompleted) result;
+        if (gateway.CurrentPartIndex == 0)
         {
-            bool regOneMatchesSwitches = WSIM.Verify(new BoardCheck(WRAMPComponents.GPRegisters, switchValue, 1));
-            bool regTwoIsDoubleSwitches = WSIM.Verify(new BoardCheck(WRAMPComponents.GPRegisters, switchValue * 2, 2));
-
-            // Require a non-zero switch setting so the objective does not auto-complete at reset state.
-            bool shiftingStepOneNow = switchValue != 0 && regOneMatchesSwitches;
-            bool shiftingStepTwoNow = switchValue != 0 && shiftingStepOneNow && regTwoIsDoubleSwitches;
-
-            // Once complete, stay complete until reset.
-            stepOne = stepOne || shiftingStepOneNow;
-            stepTwo = stepTwo || shiftingStepTwoNow;
-
-            if (stepOne && lc.Section == 0)
-            {
-                lc.Section = 1;
-            }
-            if (stepTwo && lc.Section == 1)
-            {
-                lc.Section = 2;
-            }
-
-            SyncChecklistState();
-
-            lc.CheckObjective(stepOne, "checkmarkOne");
-            lc.CheckObjective(stepTwo, "checkmarkTwo");
+            result = await shiftingPart.CheckBoardAsync(
+                WSIM.Verify,
+                board,
+                lc,
+                lc.Section,
+                maskingMessageGuess);
         }
         else
         {
-            string userCode = await lc.GetUserCode();
-            ClearSerialOutputIfCodeChanged(userCode);
-            bool answeredMaskingQuestionOne = maskingMessageGuess == ExpectedMaskingMessage;
-            bool serialOutputMatches = board.Serial1.serialText == ExpectedMaskingSerialOutput;
-
-            bool maskingStepOneNow = lc.Section >= 1 || answeredMaskingQuestionOne;
-            bool maskingStepTwoNow = lc.Section >= 2 || (maskingStepOneNow && serialOutputMatches);
-
-            // Once complete, stay complete until reset.
-            maskingStepOne = maskingStepOne || maskingStepOneNow;
-            maskingStepTwo = maskingStepTwo || maskingStepTwoNow;
-
-            if (maskingStepOne && lc.Section == 0)
-            {
-                lc.Section = 1;
-            }
-            if (maskingStepTwo && lc.Section == 1)
-            {
-                lc.Section = 2;
-                lc.LevelCompleted();
-            }
-
-            SyncChecklistState();
-
-            lc.CheckObjective(maskingStepOne, "checkmarkThree");
-            lc.CheckObjective(maskingStepTwo, "checkmarkFour");
+            result = await maskingPart.CheckBoardAsync(
+                WSIM.Verify,
+                board,
+                lc,
+                lc.Section,
+                maskingMessageGuess);
         }
 
+        (int section, bool stepOneComplete, bool stepTwoComplete, bool triggerLevelCompleted) = result;
+
+        lc.Section = section;
+
+        if (triggerLevelCompleted)
+        {
+            lc.LevelCompleted();
+        }
+
+        SyncChecklistState();
+        UpdateObjectiveCheckmarks(stepOneComplete, stepTwoComplete);
         StateHasChanged();
+    }
+
+    private void UpdateObjectiveCheckmarks(bool stepOneComplete, bool stepTwoComplete)
+    {
+        if (gateway.CurrentPartIndex == 0)
+        {
+            lc.CheckObjective(stepOneComplete, "checkmarkOne");
+            lc.CheckObjective(stepTwoComplete, "checkmarkTwo");
+            return;
+        }
+
+        lc.CheckObjective(stepOneComplete, "checkmarkThree");
+        lc.CheckObjective(stepTwoComplete, "checkmarkFour");
+    }
+
+    private void SyncChecklistState()
+    {
+        if (gateway.CurrentPartIndex == 0)
+        {
+            gateway.SetPartStatusWithoutDowngrade(ChecklistState, 0, lc.Section >= 2 ? ChecklistStepStatus.Complete : ChecklistStepStatus.Started);
+            gateway.SetPartStatusWithoutDowngrade(ChecklistState, 1, lc.Section >= 2 ? ChecklistStepStatus.Started : ChecklistStepStatus.Incomplete);
+            ChecklistState.SetSelectedStepIndex(gateway.LevelId, 0);
+            return;
+        }
+
+        gateway.SetPartStatusWithoutDowngrade(ChecklistState, 0, ChecklistStepStatus.Complete);
+        gateway.SetPartStatusWithoutDowngrade(ChecklistState, 1, lc.Section >= 2 ? ChecklistStepStatus.Complete : ChecklistStepStatus.Started);
+        ChecklistState.SetSelectedStepIndex(gateway.LevelId, 1);
     }
 
     public async Task NextSection()
     {
-        if (phase != LevelFourPhase.Shifting || lc.Section < 2)
+        if (gateway.CurrentPartIndex != 0 || lc.Section < 2)
         {
             return;
         }
 
-        phase = LevelFourPhase.Masking;
-
-        // Preserve masking progress when returning via "Next Section".
-        lc.Section = maskingStepTwo ? 2 : maskingStepOne ? 1 : 0;
-        _ = JSRuntime.InvokeVoidAsync("storeProgress", "Phase", (int)phase);
-
-        stepOne = false;
-        stepTwo = false;
-
-        ChecklistState.Set("levelFour", "Shifting", ChecklistStepStatus.Complete);
-        SetChecklistStatusWithoutDowngrade("Masking", lc.Section >= 2 ? ChecklistStepStatus.Complete : ChecklistStepStatus.Started);
-        ChecklistState.SetSelectedStepIndex("levelFour", (int)phase);
+        await gateway.SelectPartAsync(1, JSRuntime, ChecklistState);
         lc.UncheckAllObjectives();
-        await ApplySectionConfig();
+        await ApplyCurrentPartConfig();
         await CheckBoard();
         StateHasChanged();
     }
 
     public async Task OnMaskingMessageChanged(ChangeEventArgs e)
     {
-        maskingMessageGuess = e.Value?.ToString() ?? "";
+        maskingMessageGuess = e.Value?.ToString() ?? string.Empty;
         await CheckBoard();
-    }
-
-    public async Task ApplySectionConfig()
-    {
-        if (phase == LevelFourPhase.Shifting)
-        {
-            await lc.UpdateToolbox(shiftingToolbox);
-            await JSRuntime.InvokeVoidAsync("loadSavedOrPresetWorkspace", ShiftingBlocklyStorageKey, shiftingStartingWorkspace);
-            return;
-        }
-
-        await lc.UpdateToolbox(maskingToolbox);
-        await JSRuntime.InvokeVoidAsync("loadSavedOrPresetWorkspace", MaskingBlocklyStorageKey, maskingStartingWorkspace);
     }
 
     public RenderFragment Instructions =>
     @<div>
-        @if (phase == LevelFourPhase.Shifting)
+        @if (gateway.CurrentPartIndex == 0)
         {
-            <section>
-                <h2>Shifting</h2>
-                <h3>Step One <label class="inputCheckmark" id="checkmarkOne"><i class="bi bi-check-lg"></i></label></h3>
-                <p>First task: load the current switch value into register <code>$1</code>.</p>
-                <p>Tip: <strong>Make sure at least one switch is on</strong>, then run or step your code and confirm <code>$1</code> updates.</p>
-
-                @if (lc.Section >= 1)
-                {
-                    <h3>Step Two <label class="inputCheckmark" id="checkmarkTwo"><i class="bi bi-check-lg"></i></label></h3>
-                    <p>Store double the switch value in register <code>$2</code> (after setting <code>$1</code>).</p>
-                    <p>Tip: Arithmetic insructions are not allowed in this level. Check for instructions in the "logic" category instead.</p>
-                }
-
-                @if (lc.Section >= 2)
-                {
-                    <p>Nice work, both shifting tasks are complete.</p>
-                    <button class="btn btn-primary" @onclick="NextSection">Next Section</button>
-                }
-            </section>
+            <Shifting Section="@lc.Section" NextSection="NextSection" />
         }
         else
         {
-            <section>
-                <h2>Masking</h2>
-                <h3>Step One <label class="inputCheckmark" id="checkmarkThree"><i class="bi bi-check-lg"></i></label></h3>
-                <p>This starter program writes a message to the <GuidedWalkthrough ButtonText="Serial Port" TourKey="serialPortHighlight"/></p>
-                <p>You can see a modifiable subroutine "check" on the blockly section on the left.</p>
-                <p>What message is it writing? Type the exact message below.</p>
-                <input id="maskingMessageInput" @oninput="OnMaskingMessageChanged" placeholder="Type the message" />
-
-                @if (lc.Section >= 1)
-                {
-                    <h3>Step Two <label class="inputCheckmark" id="checkmarkFour"><i class="bi bi-check-lg"></i></label></h3>
-                    <p>Now make the message uppercase in serial output.</p>
-                    <p>Tip: You only need one additional instruction added to the "check" subroutine.</p>
-                }
-
-                @if (lc.Section >= 2)
-                {
-                    <p>Great work, masking is complete.</p>
-                }
-            </section>
+            <Masking Section="@lc.Section" OnMaskingMessageChanged="OnMaskingMessageChanged" />
         }
     </div>;
-
-    public string maxInstances = "{ 'textHead': 1}";
-
-    public string CurrentStartingWorkspace => phase == LevelFourPhase.Shifting ? shiftingStartingWorkspace : maskingStartingWorkspace;
-    
-    public string shiftingStartingWorkspace = """
-    {"blocks":{"languageVersion":0,"blocks":[{"type":"textHead","id":"3X;D%#OW7i/C5Y`#lxV=","x":103,"y":56,"fields":{"instruction":".text"},"next":{"block":{"type":"global","id":"Ob+QV2P-Bfx5]-[OBWs[","fields":{"instruction":".global main"},"next":{"block":{"type":"label","id":"5[{_!6Q9!c/j+g44.{5h","fields":{"label":"main"},"next":{"block":{"type":"jumpRegister","id":"3[hkavo[E!#|I|AnROCV","fields":{"instruction":"jr","register":"$ra"}}}}}}}}]}}
-    """;
-
-    private void ClearSerialOutputIfCodeChanged(string userCode)
-    {
-        if (previousMaskingCode == null)
-        {
-            previousMaskingCode = userCode;
-            return;
-        }
-
-        if (previousMaskingCode == userCode)
-        {
-            return;
-        }
-
-        board.Serial1.serialText = "";
-        board.Serial1.serialOutput.Clear();
-        board.Serial1.cursor = 0;
-        previousMaskingCode = userCode;
-    }
-
-    private void SyncChecklistState()
-    {
-        if (phase == LevelFourPhase.Shifting)
-        {
-            SetChecklistStatusWithoutDowngrade("Shifting", lc.Section >= 2 ? ChecklistStepStatus.Complete : ChecklistStepStatus.Started);
-            SetChecklistStatusWithoutDowngrade("Masking", lc.Section >= 2 ? ChecklistStepStatus.Started : ChecklistStepStatus.Incomplete);
-            ChecklistState.SetSelectedStepIndex("levelFour", (int)phase);
-            return;
-        }
-
-        SetChecklistStatusWithoutDowngrade("Shifting", ChecklistStepStatus.Complete);
-        SetChecklistStatusWithoutDowngrade("Masking", lc.Section >= 2 ? ChecklistStepStatus.Complete : ChecklistStepStatus.Started);
-        ChecklistState.SetSelectedStepIndex("levelFour", (int)phase);
-    }
-
-    private void SetChecklistStatusWithoutDowngrade(string stepLabel, ChecklistStepStatus desiredStatus)
-    {
-        ChecklistStepStatus currentStatus = GetChecklistStepStatus(stepLabel);
-        if (desiredStatus < currentStatus)
-        {
-            return;
-        }
-
-        ChecklistState.Set("levelFour", stepLabel, desiredStatus);
-    }
-
-    private ChecklistStepStatus GetChecklistStepStatus(string stepLabel)
-    {
-        if (!ChecklistState.TryGetSteps("levelFour", out IReadOnlyList<ChecklistStep>? steps))
-        {
-            return ChecklistStepStatus.Incomplete;
-        }
-
-        ChecklistStep? step = steps.FirstOrDefault(s => string.Equals(s.Label, stepLabel, StringComparison.OrdinalIgnoreCase));
-        return step?.Status ?? ChecklistStepStatus.Incomplete;
-    }
-
-    private enum LevelFourPhase
-    {
-        Shifting = 0,
-        Masking = 1
-    }
 
     public void Dispose()
     {
         ChecklistState.SectionSelectionRequested -= HandleSectionSelectionRequested;
     }
-
-    public string maskingStartingWorkspace = """ 
-    {"blocks":{"languageVersion":0,"blocks":[{"type":"label","id":"%oa;ajo!Mf:@B!Lu/~CB","x":103,"y":57,"fields":{"label":"check"},"next":{"block":{"type":"loadWord","id":"lJH:R%ak6%u#-StLmLe%","fields":{"instruction":"lw","register1":"$11","offset":"0x70003","register2":"$0"},"next":{"block":{"type":"bitwiseImmediate","id":"6W;IAy[l.9g^Q26m.e0f","fields":{"instruction":"andi","register1":"$11","register2":"$11","immediate":"0x2"},"next":{"block":{"type":"branchOn","id":"2Z*eRAf6#4-cc?S1w?-s","fields":{"instruction":"beqz","register":"$11","offset":"check"},"next":{"block":{"type":"storeWord","id":"?Teo.])C{H;jzjrF5Ucg","fields":{"instruction":"sw","register1":"$9","offset":"0x70000","register2":"$0"},"next":{"block":{"type":"arithmeticImmediate","id":"M~/FDo=K|C@VewL.DY_C","fields":{"instruction":"addi","register1":"$2","register2":"$2","immediate":"1"},"next":{"block":{"type":"jump","id":"!vmM-MyEbA6(%bj2f7e(","fields":{"instruction":"j","address":"loop"}}}}}}}}}}}}}}]}}
-    """;
-
-    public string[][] Library =
-    {
-        new string[] { "message.s", """
-    .text
-    .global main
-    main:
-    addi $2, $0, 0   # initialize $2 to value of 0, to be used as an offset into the message
-    loop:
-    lw $9, message($2) # load the next character in the message from .data into $9
-    beqz $9, done # if the character is 0 (end of string), jump to "done"
-    """ },
-        new string[] { "$Blockly", "" },
-        new string[] { "done.s", """
-        done:
-        jr $ra 
-        """},
-        new string[] { "data.s", """
-    .data
-    message:
-    .word 104
-    .word 101
-    .word 108
-    .word 108
-    .word 111
-    .word 0
-    """ }
-    };
 }
