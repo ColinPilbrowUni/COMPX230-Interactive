@@ -29,13 +29,13 @@
     @if (Section >= 3)
     {
         <h3>Question Four <label class="inputCheckmark" id="checkmarkFour"><i class="bi bi-check-lg"></i></label></h3>
-        <p>Mask the value in $1 to keep only bits 4-7 and clear all other bits. Store the result in $3.</p>
-        <p>Tip: The mask for bits 4-7 is 0xF0 (1111 0000 in binary).</p>
+        <p>Mask the value in $1 to ensure bits 12-15 are set. <b>Other bits must be unaffected.</b> Store the result in $3.</p>
+        <p>Tip: The mask for bits 12-15 is 0xF000 (1111 0000 0000 0000 in binary).</p>
     }
 
     @if (Section >= 4)
     {
-        <p>Excellent! You've mastered bitwise masking.</p>
+        <p>Excellent! You've completed bitwise masking. Feel free to attempt the optional bonus task.</p>
         <button class="btn btn-primary mb-2" @onclick="NextSection">Next Section</button>
     }
 
@@ -180,14 +180,14 @@
         // Check blockly tasks if we've passed the questions
         if (Section >= 2)
         {
-            uint maskedValueBits47 = switchValue & 0xF0;
+            uint maskedValueBits1215 = switchValue | 0xF000;
 
             bool allSwitchesOn = switchValue == 0xFFFF;
             bool regTwoIs255 = VerifyBoard(new BoardCheck(WRAMPComponents.GPRegisters, 255, 2));
-            bool regThreeIsMaskedBits47 = VerifyBoard(new BoardCheck(WRAMPComponents.GPRegisters, maskedValueBits47, 3));
+            bool regThreeIsMaskedBits1215 = VerifyBoard(new BoardCheck(WRAMPComponents.GPRegisters, maskedValueBits1215, 3));
 
             bool maskingStepOneNow = allSwitchesOn && regTwoIs255;
-            bool maskingStepTwoNow = (blocklyStepOneComplete || maskingStepOneNow) && regThreeIsMaskedBits47;
+            bool maskingStepTwoNow = (blocklyStepOneComplete || maskingStepOneNow) && regThreeIsMaskedBits1215;
 
             blocklyStepOneComplete = blocklyStepOneComplete || maskingStepOneNow;
             blocklyStepTwoComplete = blocklyStepTwoComplete || maskingStepTwoNow;
