@@ -15,7 +15,7 @@ public sealed class ChecklistStateStore
     {
         levels.Clear();
         selectedStepIndices.Clear();
-        DefineLevel("levelFour", ["Shifting", "Masking"], currentStepLabel: "Shifting");
+        DefineLevel("levelFour", ["Shifting", "Masking", "Capitalization"], currentStepLabel: "Shifting");
         NotifyStateChanged();
     }
 

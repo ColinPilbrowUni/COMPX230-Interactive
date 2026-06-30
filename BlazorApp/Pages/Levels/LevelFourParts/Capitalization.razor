@@ -1,0 +1,201 @@
+@using RexSimulator.Hardware
+@inject IJSRuntime JSRuntime
+
+<section>
+    <h2>Capitalization</h2>
+    <h3>Step One <label class="inputCheckmark" id="checkmarkFive"><i class="bi bi-check-lg"></i></label></h3>
+    <p>This starter program writes a message to the <GuidedWalkthrough ButtonText="Serial Port" TourKey="serialPortHighlight" /></p>
+    <p>You can see a modifiable subroutine "check" on the blockly section on the left.</p>
+    <p>What message is it writing? Type the exact message below.</p>
+    <input id="capitalizationMessageInput" @oninput="HandleCapitalizationMessageChanged" placeholder="Type the message" />
+
+    @if (Section >= 1)
+    {
+        <h3>Step Two <label class="inputCheckmark" id="checkmarkSix"><i class="bi bi-check-lg"></i></label></h3>
+        <p>Now make the message uppercase in serial output.</p>
+        <p>Tip: You only need one additional instruction added to the "check" subroutine.</p>
+    }
+
+    @if (Section >= 2)
+    {
+        <p>Great work, Bitwise is complete.</p>
+    }
+</section>
+
+@code {
+    private const string ExpectedCapitalizationMessage = "hello";
+    private const string ExpectedCapitalizationSerialOutput = "HELLO";
+
+    public static readonly LevelGroupPart GroupPart = new("capitalization", "Capitalization", ProgressScopeId);
+
+    public const string ProgressScopeId = "levelFourCapitalization";
+    public const string BlocklyStorageKey = "levelFourCapitalizationBlockly";
+
+    public static UIComponents Components { get; } = new(
+        Blockly: true,
+        Code: true,
+        GPRegisters: true,
+        ParallelRegisters: true,
+        SerialPort: true,
+        Visualiser: true);
+
+    public static Toolbox Toolbox { get; } = new()
+    {
+        contents = new List<Category>() {
+            new Category {
+                name = "Logic",
+                categorystyle = "logicCategory",
+                contents = new List<Block>() {
+                    new Block { type = "bitwiseImmediate" },
+                    new Block { type = "shiftImmediate" }
+                }
+            }
+        }
+    };
+
+    public static string StartingWorkspace { get; } = """ 
+    {"blocks":{"languageVersion":0,"blocks":[{"type":"label","id":"%oa;ajo!Mf:@B!Lu/~CB","x":103,"y":57,"fields":{"label":"check"},"next":{"block":{"type":"loadWord","id":"lJH:R%ak6%u#-StLmLe%","fields":{"instruction":"lw","register1":"$11","offset":"0x70003","register2":"$0"},"next":{"block":{"type":"bitwiseImmediate","id":"6W;IAy[l.9g^Q26m.e0f","fields":{"instruction":"andi","register1":"$11","register2":"$11","immediate":"0x2"},"next":{"block":{"type":"branchOn","id":"2Z*eRAf6#4-cc?S1w?-s","fields":{"instruction":"beqz","register":"$11","offset":"check"},"next":{"block":{"type":"storeWord","id":"?Teo.])C{H;jzjrF5Ucg","fields":{"instruction":"sw","register1":"$9","offset":"0x70000","register2":"$0"},"next":{"block":{"type":"arithmeticImmediate","id":"M~/FDo=K|C@VewL.DY_C","fields":{"instruction":"addi","register1":"$2","register2":"$2","immediate":"1"},"next":{"block":{"type":"jump","id":"!vmM-MyEbA6(%bj2f7e(","fields":{"instruction":"j","address":"loop"}}}}}}}}}}}}}}]}}
+    """;
+
+    public static string? MaxInstances { get; } = "{ 'textHead': 1}";
+
+    public static string[][]? Library { get; } =
+    {
+        new string[] { "message.s", """
+    .text
+    .global main
+    main:
+        addi $2, $0, 0   # initialize $2 to value of 0, to be used as an offset into the message
+        loop:
+        lw $9, message($2) # load the next character in the message from .data into $9
+        beqz $9, done # if the character is 0 (end of string), jump to "done"
+    """ },
+        new string[] { "$Blockly", "" },
+        new string[] { "done.s", """
+        done:
+            jr $ra 
+        """},
+        new string[] { "data.s", """
+    .data
+    message:
+        .word 104
+        .word 101
+        .word 108
+        .word 108
+        .word 111
+        .word 0
+    """ }
+    };
+
+    private bool capitalizationStepOneComplete;
+    private bool capitalizationStepTwoComplete;
+    private string capitalizationMessageGuess = string.Empty;
+    private string? previousCapitalizationCode;
+
+    [Parameter]
+    public int Section { get; set; }
+
+    [Parameter]
+    public Func<BoardCheck, bool>? VerifyBoard { get; set; }
+
+    [Parameter]
+    public RexBoard? Board { get; set; }
+
+    [Parameter]
+    public LevelComponents? LevelComponents { get; set; }
+
+    [Parameter]
+    public EventCallback<(int Section, bool capitalizationStepOneComplete, bool capitalizationStepTwoComplete, bool TriggerLevelCompleted)> ProgressChanged { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        capitalizationStepOneComplete = Section >= 1;
+        capitalizationStepTwoComplete = Section >= 2;
+    }
+
+    public void ApplyChecklistSelection(ChecklistStepStatus status, ref int section)
+    {
+        if (status == ChecklistStepStatus.Complete)
+        {
+            section = 2;
+            capitalizationStepOneComplete = true;
+            capitalizationStepTwoComplete = true;
+            return;
+        }
+
+        section = capitalizationStepOneComplete ? 1 : 0;
+    }
+
+    public async Task HandleBoardChanged()
+    {
+        if (Board == null || LevelComponents == null)
+        {
+            return;
+        }
+
+        string userCode = await LevelComponents.GetUserCode();
+        ClearSerialOutputIfCodeChanged(Board, userCode);
+
+        bool answeredCapitalizationQuestionOne = string.Equals(capitalizationMessageGuess, ExpectedCapitalizationMessage, StringComparison.Ordinal);
+        bool serialOutputMatches = string.Equals(Board.Serial1.serialText, ExpectedCapitalizationSerialOutput, StringComparison.Ordinal);
+
+        bool capitalizationStepOneNow = Section >= 1 || answeredCapitalizationQuestionOne;
+        bool capitalizationStepTwoNow = Section >= 2 || (capitalizationStepOneNow && serialOutputMatches);
+
+        capitalizationStepOneComplete = capitalizationStepOneComplete || capitalizationStepOneNow;
+        capitalizationStepTwoComplete = capitalizationStepTwoComplete || capitalizationStepTwoNow;
+
+        if (capitalizationStepOneComplete && Section == 0)
+        {
+            Section = 1;
+        }
+
+        bool triggerLevelCompleted = false;
+        if (capitalizationStepTwoComplete && Section == 1)
+        {
+            Section = 2;
+        }
+
+        if (capitalizationStepTwoComplete && capitalizationStepOneComplete)
+        {
+            triggerLevelCompleted = true;
+        }
+
+        await ProgressChanged.InvokeAsync((Section, capitalizationStepOneComplete, capitalizationStepTwoComplete, triggerLevelCompleted));
+    }
+
+    private async Task HandleCapitalizationMessageChanged(ChangeEventArgs e)
+    {
+        capitalizationMessageGuess = e.Value?.ToString() ?? string.Empty;
+
+        if (string.Equals(capitalizationMessageGuess, ExpectedCapitalizationMessage, StringComparison.Ordinal))
+        {
+            capitalizationStepOneComplete = true;
+            if (Section == 0)
+            {
+                Section = 1;
+            }
+
+            await ProgressChanged.InvokeAsync((Section, capitalizationStepOneComplete, capitalizationStepTwoComplete, false));
+        }
+    }
+
+    private void ClearSerialOutputIfCodeChanged(RexBoard board, string userCode)
+    {
+        if (previousCapitalizationCode == null)
+        {
+            previousCapitalizationCode = userCode;
+            return;
+        }
+
+        if (previousCapitalizationCode == userCode)
+        {
+            return;
+        }
+
+        board.Serial1.serialText = string.Empty;
+        board.Serial1.serialOutput.Clear();
+        board.Serial1.cursor = 0;
+        previousCapitalizationCode = userCode;
+    }
+}

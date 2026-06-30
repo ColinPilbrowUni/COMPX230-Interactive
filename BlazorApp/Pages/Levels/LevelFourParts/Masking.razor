@@ -2,29 +2,45 @@
 
 <section>
     <h2>Masking</h2>
-    <h3>Step One <label class="inputCheckmark" id="checkmarkThree"><i class="bi bi-check-lg"></i></label></h3>
-    <p>This starter program writes a message to the <GuidedWalkthrough ButtonText="Serial Port" TourKey="serialPortHighlight" /></p>
-    <p>You can see a modifiable subroutine "check" on the blockly section on the left.</p>
-    <p>What message is it writing? Type the exact message below.</p>
-    <input id="maskingMessageInput" @oninput="OnMaskingMessageChanged" placeholder="Type the message" />
+    <h3>Understanding Bitwise Masking</h3>
+    <p>Masking is a technique used to isolate or clear specific bits in a value. A mask is a binary pattern used with logical operations like AND, OR, and XOR.</p>
+
+    <h4>Question One</h4>
+    <p>If you want to keep only the lower 8 bits of a 32-bit value and clear all other bits, what hexadecimal mask would you use with an AND operation?</p>
+    <input id="inputMaskOne" @oninput="OnInputMaskOneChanged" placeholder="e.g. 0x0F" />
+    <label class="inputCheckmark" id="inputMaskOneCheckmark" for="inputMaskOne"><i class="bi bi-check-lg"></i></label>
 
     @if (Section >= 1)
     {
-        <h3>Step Two <label class="inputCheckmark" id="checkmarkFour"><i class="bi bi-check-lg"></i></label></h3>
-        <p>Now make the message uppercase in serial output.</p>
-        <p>Tip: You only need one additional instruction added to the "check" subroutine.</p>
+        <h4>Question Two</h4>
+        <p>Which bitwise operation toggles specific bits (setting 0s to 1s and 1s to 0s at the masked positions)?</p>
+        <input id="inputMaskTwo" @oninput="OnInputMaskTwoChanged" placeholder="e.g. AND" />
+        <label class="inputCheckmark" id="inputMaskTwoCheckmark" for="inputMaskTwo"><i class="bi bi-check-lg"></i></label>
     }
 
     @if (Section >= 2)
     {
-        <p>Great work, masking is complete.</p>
+        <h3>Question Three <label class="inputCheckmark" id="checkmarkThree"><i class="bi bi-check-lg"></i></label></h3>
+        <p><b>Turn on all switches</b>, then load the switch value into register <code>$1</code> and mask it with 0xFF into <code>$2</code>.</p>
+        <p>Tip: Use an AND immediate instruction to apply the mask to <code>$1</code> and store the result in <code>$2</code>.</p>
+        <p>Expected with all switches on: <code>$2 = 255</code>.</p>
+    }
+
+    @if (Section >= 3)
+    {
+        <h3>Question Four <label class="inputCheckmark" id="checkmarkFour"><i class="bi bi-check-lg"></i></label></h3>
+        <p>Mask the value in $1 to keep only bits 4-7 and clear all other bits. Store the result in $3.</p>
+        <p>Tip: The mask for bits 4-7 is 0xF0 (1111 0000 in binary).</p>
+    }
+
+    @if (Section >= 4)
+    {
+        <p>Excellent! You've mastered bitwise masking.</p>
+        <button class="btn btn-primary" @onclick="NextSection">Next Section</button>
     }
 </section>
 
 @code {
-    private const string ExpectedMaskingMessage = "hello";
-    private const string ExpectedMaskingSerialOutput = "HELLO";
-
     public static readonly LevelGroupPart GroupPart = new("masking", "Masking", ProgressScopeId);
 
     public const string ProgressScopeId = "levelFourMasking";
@@ -33,9 +49,10 @@
     public static UIComponents Components { get; } = new(
         Blockly: true,
         Code: true,
+        Switches: true,
+        LEDs: true,
         GPRegisters: true,
         ParallelRegisters: true,
-        SerialPort: true,
         Visualiser: true);
 
     public static Toolbox Toolbox { get; } = new()
@@ -62,6 +79,7 @@
                 name = "Memory",
                 categorystyle = "memoryCategory",
                 contents = new List<Block>() {
+                    new Block { type = "storeWord" },
                     new Block { type = "loadWord" }
                 }
             },
@@ -69,126 +87,144 @@
                 name = "Logic",
                 categorystyle = "logicCategory",
                 contents = new List<Block>() {
+                    new Block { type = "bitwise" },
                     new Block { type = "bitwiseImmediate" },
-                    new Block { type = "shiftImmediate" }
+                    new Block { type = "shift" },
+                    new Block { type = "shiftImmediate" },
                 }
-            }
+            },
         }
     };
 
-    public static string StartingWorkspace { get; } = """ 
-    {"blocks":{"languageVersion":0,"blocks":[{"type":"label","id":"%oa;ajo!Mf:@B!Lu/~CB","x":103,"y":57,"fields":{"label":"check"},"next":{"block":{"type":"loadWord","id":"lJH:R%ak6%u#-StLmLe%","fields":{"instruction":"lw","register1":"$11","offset":"0x70003","register2":"$0"},"next":{"block":{"type":"bitwiseImmediate","id":"6W;IAy[l.9g^Q26m.e0f","fields":{"instruction":"andi","register1":"$11","register2":"$11","immediate":"0x2"},"next":{"block":{"type":"branchOn","id":"2Z*eRAf6#4-cc?S1w?-s","fields":{"instruction":"beqz","register":"$11","offset":"check"},"next":{"block":{"type":"storeWord","id":"?Teo.])C{H;jzjrF5Ucg","fields":{"instruction":"sw","register1":"$9","offset":"0x70000","register2":"$0"},"next":{"block":{"type":"arithmeticImmediate","id":"M~/FDo=K|C@VewL.DY_C","fields":{"instruction":"addi","register1":"$2","register2":"$2","immediate":"1"},"next":{"block":{"type":"jump","id":"!vmM-MyEbA6(%bj2f7e(","fields":{"instruction":"j","address":"loop"}}}}}}}}}}}}}}]}}
+    public static string StartingWorkspace { get; } = """
+    {"blocks":{"languageVersion":0,"blocks":[{"type":"textHead","id":"maskHead001","x":103,"y":56,"fields":{"instruction":".text"},"next":{"block":{"type":"global","id":"maskGlobal001","fields":{"instruction":".global main"},"next":{"block":{"type":"label","id":"maskMain001","fields":{"label":"main"},"next":{"block":{"type":"jumpRegister","id":"maskJr001","fields":{"instruction":"jr","register":"$ra"}}}}}}}}]}}
     """;
 
     public static string? MaxInstances { get; } = "{ 'textHead': 1}";
 
-    public static string[][]? Library { get; } =
-    {
-        new string[] { "message.s", """
-    .text
-    .global main
-    main:
-    addi $2, $0, 0   # initialize $2 to value of 0, to be used as an offset into the message
-    loop:
-    lw $9, message($2) # load the next character in the message from .data into $9
-    beqz $9, done # if the character is 0 (end of string), jump to "done"
-    """ },
-        new string[] { "$Blockly", "" },
-        new string[] { "done.s", """
-        done:
-        jr $ra 
-        """},
-        new string[] { "data.s", """
-    .data
-    message:
-    .word 104
-    .word 101
-    .word 108
-    .word 108
-    .word 111
-    .word 0
-    """ }
-    };
+    public static string[][]? Library => null;
 
-    private bool stepOneComplete;
-    private bool stepTwoComplete;
-    private string? previousMaskingCode;
+    private bool blocklyStepOneComplete;
+    private bool blocklyStepTwoComplete;
 
     [Parameter]
     public int Section { get; set; }
 
     [Parameter]
-    public EventCallback<ChangeEventArgs> OnMaskingMessageChanged { get; set; }
+    public EventCallback NextSection { get; set; }
 
-    public void RestoreProgressFromSection(int section)
+    [Parameter]
+    public Func<BoardCheck, bool>? VerifyBoard { get; set; }
+
+    [Parameter]
+    public RexBoard? Board { get; set; }
+
+    [Parameter]
+    public LevelComponents? LevelComponents { get; set; }
+
+    [Parameter]
+    public EventCallback<(int Section, bool StepOneComplete, bool StepTwoComplete, bool TriggerLevelCompleted)> ProgressChanged { get; set; }
+
+    protected override void OnParametersSet()
     {
-        stepOneComplete = section >= 1 || stepOneComplete;
-        stepTwoComplete = section >= 2 || stepTwoComplete;
+        blocklyStepOneComplete = Section >= 3 || blocklyStepOneComplete;
+        blocklyStepTwoComplete = Section >= 4 || blocklyStepTwoComplete;
     }
 
     public void ApplyChecklistSelection(ChecklistStepStatus status, ref int section)
     {
         if (status == ChecklistStepStatus.Complete)
         {
-            section = 2;
-            stepOneComplete = true;
-            stepTwoComplete = true;
+            section = 4;
+            blocklyStepOneComplete = true;
+            blocklyStepTwoComplete = true;
             return;
         }
 
-        section = stepOneComplete ? 1 : 0;
+        if (blocklyStepTwoComplete)
+        {
+            section = 4;
+        }
+        else if (blocklyStepOneComplete)
+        {
+            section = 3;
+        }
+        else
+        {
+            // Question progression is tracked directly via Section (set by input handlers).
+            section = Math.Clamp(Section, 0, 2);
+        }
     }
 
-    public async Task<(int Section, bool StepOneComplete, bool StepTwoComplete, bool TriggerLevelCompleted)> CheckBoardAsync(
-        Func<BoardCheck, bool> verifyBoard,
-        RexBoard board,
-        LevelComponents levelComponents,
-        int section,
-        string maskingMessageGuess)
+    public Task HandleBoardChanged()
     {
-        string userCode = await levelComponents.GetUserCode();
-        ClearSerialOutputIfCodeChanged(board, userCode);
-
-        bool answeredMaskingQuestionOne = string.Equals(maskingMessageGuess, ExpectedMaskingMessage, StringComparison.Ordinal);
-        bool serialOutputMatches = string.Equals(board.Serial1.serialText, ExpectedMaskingSerialOutput, StringComparison.Ordinal);
-
-        bool maskingStepOneNow = section >= 1 || answeredMaskingQuestionOne;
-        bool maskingStepTwoNow = section >= 2 || (maskingStepOneNow && serialOutputMatches);
-
-        stepOneComplete = stepOneComplete || maskingStepOneNow;
-        stepTwoComplete = stepTwoComplete || maskingStepTwoNow;
-
-        if (stepOneComplete && section == 0)
+        if (VerifyBoard == null || Board == null)
         {
-            section = 1;
+            return Task.CompletedTask;
         }
 
-        bool triggerLevelCompleted = false;
-        if (stepTwoComplete && section == 1)
+        uint switchValue = Board.Parallel.Switches;
+
+        // Check blockly tasks if we've passed the questions
+        if (Section >= 2)
         {
-            section = 2;
-            triggerLevelCompleted = true;
+            uint maskedValueBits47 = switchValue & 0xF0;
+
+            bool allSwitchesOn = switchValue == 0xFFFF;
+            bool regTwoIs255 = VerifyBoard(new BoardCheck(WRAMPComponents.GPRegisters, 255, 2));
+            bool regThreeIsMaskedBits47 = VerifyBoard(new BoardCheck(WRAMPComponents.GPRegisters, maskedValueBits47, 3));
+
+            bool maskingStepOneNow = allSwitchesOn && regTwoIs255;
+            bool maskingStepTwoNow = (blocklyStepOneComplete || maskingStepOneNow) && regThreeIsMaskedBits47;
+
+            blocklyStepOneComplete = blocklyStepOneComplete || maskingStepOneNow;
+            blocklyStepTwoComplete = blocklyStepTwoComplete || maskingStepTwoNow;
+
+            if (blocklyStepOneComplete && Section == 2)
+            {
+                Section = 3;
+            }
+            if (blocklyStepTwoComplete && Section == 3)
+            {
+                Section = 4;
+            }
         }
 
-        return (section, stepOneComplete, stepTwoComplete, triggerLevelCompleted);
+        return ProgressChanged.InvokeAsync((Section, blocklyStepOneComplete, blocklyStepTwoComplete, false));
     }
 
-    private void ClearSerialOutputIfCodeChanged(RexBoard board, string userCode)
+    private async Task OnInputMaskOneChanged(ChangeEventArgs e)
     {
-        if (previousMaskingCode == null)
-        {
-            previousMaskingCode = userCode;
-            return;
-        }
+        string userInput = e.Value?.ToString() ?? "";
+        string normalizedInput = userInput.Trim().ToUpperInvariant();
 
-        if (previousMaskingCode == userCode)
+        if (normalizedInput == "0XFF" || normalizedInput == "FF" || normalizedInput == "255")
         {
-            return;
+            if (Section < 1)
+            {
+                Section = 1;
+            }
+            await JSRuntime.InvokeVoidAsync("objectiveCheck", "inputMaskOneCheckmark");
+            await ProgressChanged.InvokeAsync((Section, blocklyStepOneComplete, blocklyStepTwoComplete, false));
         }
-
-        board.Serial1.serialText = string.Empty;
-        board.Serial1.serialOutput.Clear();
-        board.Serial1.cursor = 0;
-        previousMaskingCode = userCode;
     }
+
+    private async Task OnInputMaskTwoChanged(ChangeEventArgs e)
+    {
+        string userInput = e.Value?.ToString() ?? "";
+
+        // Accept XOR in any case
+        if (userInput.Trim().ToUpper() == "XOR")
+        {
+            if (Section < 2)
+            {
+                Section = 2;
+            }
+            await JSRuntime.InvokeVoidAsync("objectiveCheck", "inputMaskTwoCheckmark");
+            await ProgressChanged.InvokeAsync((Section, blocklyStepOneComplete, blocklyStepTwoComplete, false));
+        }
+    }
+
+    [Inject]
+    private IJSRuntime JSRuntime { get; set; } = null!;
 }

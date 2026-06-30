@@ -84,8 +84,8 @@
 
     public static string[][]? Library => null;
 
-    private bool stepOneComplete;
-    private bool stepTwoComplete;
+    private bool shiftingStepOneComplete;
+    private bool shiftingStepTwoComplete;
 
     [Parameter]
     public int Section { get; set; }
@@ -93,10 +93,22 @@
     [Parameter]
     public EventCallback NextSection { get; set; }
 
-    public void RestoreProgressFromSection(int section)
+    [Parameter]
+    public Func<BoardCheck, bool>? VerifyBoard { get; set; }
+
+    [Parameter]
+    public RexBoard? Board { get; set; }
+
+    [Parameter]
+    public LevelComponents? LevelComponents { get; set; }
+
+    [Parameter]
+    public EventCallback<(int Section, bool shiftingStepOneComplete, bool shiftingStepTwoComplete, bool TriggerLevelCompleted)> ProgressChanged { get; set; }
+
+    protected override void OnParametersSet()
     {
-        stepOneComplete = section >= 1 || stepOneComplete;
-        stepTwoComplete = section >= 2 || stepTwoComplete;
+        shiftingStepOneComplete = Section >= 1 || shiftingStepOneComplete;
+        shiftingStepTwoComplete = Section >= 2 || shiftingStepTwoComplete;
     }
 
     public void ApplyChecklistSelection(ChecklistStepStatus status, ref int section)
@@ -104,40 +116,40 @@
         if (status == ChecklistStepStatus.Complete)
         {
             section = 2;
-            stepOneComplete = true;
-            stepTwoComplete = true;
+            shiftingStepOneComplete = true;
+            shiftingStepTwoComplete = true;
             return;
         }
 
-        section = stepOneComplete ? 1 : 0;
+        section = shiftingStepOneComplete ? 1 : 0;
     }
 
-    public Task<(int Section, bool StepOneComplete, bool StepTwoComplete, bool TriggerLevelCompleted)> CheckBoardAsync(
-        Func<BoardCheck, bool> verifyBoard,
-        RexBoard board,
-        LevelComponents levelComponents,
-        int section,
-        string maskingMessageGuess)
+    public Task HandleBoardChanged()
     {
-        uint switchValue = board.Parallel.Switches;
-        bool regOneMatchesSwitches = verifyBoard(new BoardCheck(WRAMPComponents.GPRegisters, switchValue, 1));
-        bool regTwoIsDoubleSwitches = verifyBoard(new BoardCheck(WRAMPComponents.GPRegisters, switchValue * 2, 2));
+        if (VerifyBoard == null || Board == null)
+        {
+            return Task.CompletedTask;
+        }
+
+        uint switchValue = Board.Parallel.Switches;
+        bool regOneMatchesSwitches = VerifyBoard(new BoardCheck(WRAMPComponents.GPRegisters, switchValue, 1));
+        bool regTwoIsDoubleSwitches = VerifyBoard(new BoardCheck(WRAMPComponents.GPRegisters, switchValue * 2, 2));
 
         bool shiftingStepOneNow = switchValue != 0 && regOneMatchesSwitches;
         bool shiftingStepTwoNow = switchValue != 0 && shiftingStepOneNow && regTwoIsDoubleSwitches;
 
-        stepOneComplete = stepOneComplete || shiftingStepOneNow;
-        stepTwoComplete = stepTwoComplete || shiftingStepTwoNow;
+        shiftingStepOneComplete = shiftingStepOneComplete || shiftingStepOneNow;
+        shiftingStepTwoComplete = shiftingStepTwoComplete || shiftingStepTwoNow;
 
-        if (stepOneComplete && section == 0)
+        if (shiftingStepOneComplete && Section == 0)
         {
-            section = 1;
+            Section = 1;
         }
-        if (stepTwoComplete && section == 1)
+        if (shiftingStepTwoComplete && Section == 1)
         {
-            section = 2;
+            Section = 2;
         }
 
-        return Task.FromResult((section, stepOneComplete, stepTwoComplete, false));
+        return ProgressChanged.InvokeAsync((Section, shiftingStepOneComplete, shiftingStepTwoComplete, false));
     }
 }

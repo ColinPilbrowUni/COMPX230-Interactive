@@ -419,6 +419,10 @@ code {
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
 }
 
+input {
+    margin-bottom: 0.5rem;
+}
+
 .walkthrough-close {
     position: absolute;
     top: 0.35rem;
