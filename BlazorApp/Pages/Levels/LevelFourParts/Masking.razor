@@ -21,7 +21,7 @@
     @if (Section >= 2)
     {
         <h3>Question Three <label class="inputCheckmark" id="checkmarkThree"><i class="bi bi-check-lg"></i></label></h3>
-        <p><b>Turn on all switches</b>, then load the switch value into register <code>$1</code> and mask it with 0xFF into <code>$2</code>.</p>
+        <p><b>Turn on all switches</b>, then load the switch value into register <code>$1</code> and using masking to store the bottom 8 bits into <code>$2</code>.</p>
         <p>Tip: Use an AND immediate instruction to apply the mask to <code>$1</code> and store the result in <code>$2</code>.</p>
         <p>Expected with all switches on: <code>$2 = 255</code>.</p>
     }
@@ -36,7 +36,18 @@
     @if (Section >= 4)
     {
         <p>Excellent! You've mastered bitwise masking.</p>
-        <button class="btn btn-primary" @onclick="NextSection">Next Section</button>
+        <button class="btn btn-primary mb-2" @onclick="NextSection">Next Section</button>
+    }
+
+    @if (Section >= 4)
+    {
+        <h3>Bonus Task <label class="inputCheckmark" id="checkmarkFive"><i class="bi bi-check-lg"></i></label></h3>
+        <p>Click <button class="walkthrough-trigger-btn" @onclick="SetSwitchesForBonus">Here</button> to turn on every second switch. Store the inverse value of the switches into $4.</p>
+    }
+
+    @if (Section >= 4 && bonusStepComplete)
+    {
+        <p>Great job! You've completed the bonus task.</p>
     }
 </section>
 
@@ -106,6 +117,7 @@
 
     private bool blocklyStepOneComplete;
     private bool blocklyStepTwoComplete;
+    private bool bonusStepComplete;
 
     [Parameter]
     public int Section { get; set; }
@@ -188,6 +200,10 @@
             {
                 Section = 4;
             }
+            if (Section >= 4 && Board.Parallel.Switches == 0x5555 && VerifyBoard(new BoardCheck(WRAMPComponents.GPRegisters, 0xAAAA, 4)))
+            {
+                bonusStepComplete = true;
+            }
         }
 
         return ProgressChanged.InvokeAsync((Section, blocklyStepOneComplete, blocklyStepTwoComplete, false));
@@ -222,6 +238,16 @@
             }
             await JSRuntime.InvokeVoidAsync("objectiveCheck", "inputMaskTwoCheckmark");
             await ProgressChanged.InvokeAsync((Section, blocklyStepOneComplete, blocklyStepTwoComplete, false));
+        }
+    }
+
+    private void SetSwitchesForBonus()
+    {
+        if (Board != null)
+        {
+            // Turn on every second switch (binary 0101010101010101 = 0x5555)
+            Board.Parallel.Switches = 0x5555;
+            StateHasChanged();
         }
     }
 
