@@ -1,0 +1,341 @@
+@page "/levelBss"
+@using RexSimulator.Hardware
+@using System.Text.Json
+
+@inject IJSRuntime JSRuntime
+
+<Level @ref="levelComponent" Title=".data and .bss" BoardChanged="CheckBoard" Toolbox="@toolbox" maxInstances="@maxInstances" UIComponents="@Components" WSIMInstructions="@Instructions"/>
+
+@code {
+    public Level? levelComponent;
+    required public WSIM WSIM;
+
+    required public RexBoard board;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender && levelComponent != null && levelComponent.wsimComponent != null)
+        {
+            board = levelComponent.wsimComponent.board;
+            WSIM = levelComponent.wsimComponent;
+        }
+    }
+
+    public UIComponents Components = new UIComponents(Blockly: true, Visualiser: true, Code: true, GPRegisters: true, SPRegisters: false, RAM: true, ParallelRegisters: false, SerialPort: false);
+
+    /// <summary>
+    /// This method is called on any changes to the WRAMP board, or the Blockly workspace. The state of the board can be accessed via the variable board or using
+    /// the method WSIM.Verify(), variables like running can be accessed via WSIM, and the user's code can be accessed by calling await GetUserCode()
+    /// </summary>
+    /// <returns></returns>
+    public async Task CheckBoard()
+    {
+        string code = await GetUserCode();
+        if (section == 0)
+        {
+            if (code.Contains(".data")) section = 1;
+        }
+        if (section == 1)
+        {
+            if (code.Contains(".word")) section = 2;
+        }
+        if (section == 2)
+        {
+            if (code.Contains(".word 10")) section = 3;
+        }
+        // Section 3 checks for input into textbox
+        if (section == 4)
+        {
+            if (code.Contains("lw") && code.Contains("sw")) section = 5;
+        }
+        if (section == 5)
+        {
+            if (board.CPU.mGpRegisters.mRegisters[1] == 10) section = 6;
+        }
+        if (section == 6)
+        {
+            bool correctValueStored = false;
+            for (int i = 0; i < 20; i++)    // Check the first little bit of RAM for the value 11
+            {
+                if (board.RAM.mMemory[i] == 11) correctValueStored = true;
+            }
+
+            if (code.Contains("addi $1, $1, 1") && correctValueStored) section = 7;
+        }
+    }
+
+    public void OnInputMessageChanged(ChangeEventArgs e)
+    {
+        string userInput = e.Value?.ToString() ?? "";
+        if (userInput.Trim().ToUpper() == "0000000A" || userInput.Trim().ToUpper() == "A")
+        {
+            JSRuntime.InvokeVoidAsync("objectiveCheck", "inputCheckmarkA");
+            if (section == 3) section = 4;
+
+        }
+    }
+
+    /// <summary>
+    /// Toggle a checkmark depending on the state of goal
+    /// </summary>
+    /// <param name="goal">Goal to be checked</param>
+    /// <param name="checkmarkID">ID of checkmark to be toggled</param>
+    public void CheckObjective(bool goal, string checkmarkID)
+    {
+        JSRuntime.InvokeVoidAsync(goal ? "objectiveCheck" : "objectiveUncheck", checkmarkID);
+    }
+
+    /// <summary>
+    /// </summary>
+    /// <returns>WRAMP Code from the Blockly workspace</returns>
+    public async Task<string> GetUserCode()
+    {
+        return await JSRuntime.InvokeAsync<string>("getGeneratedCode");
+    }
+
+    /// <summary>
+    /// Update the Blockly toolbox
+    /// </summary>
+    /// <param name="toolbox"></param>
+    /// <returns></returns>
+    public async Task UpdateToolbox(Toolbox toolbox)
+    {
+        await JSRuntime.InvokeVoidAsync("updateToolbox", JsonSerializer.Serialize(toolbox));
+    }
+
+    public int section = 0;
+    public int block = 0;
+
+    
+
+    public RenderFragment Block1 =>
+    @<div>
+    <h1>Loading and storing .data</h1>
+    <ul>
+    
+        @if (section >= 0)
+                {
+        <li>In this exercise we'll be taking a closer look at <code>.data</code> and <code>.bss</code></li>
+        <li>These are two sections of a WRAMP program, similar to <code>.text</code></li>
+        <li>The <code>.text</code> section is where you put all your WRAMP assembly code</li>
+        <li>The <code>.data</code> section is where you can reserve memory and give it some initial values</li>
+        <li>Try adding a <code>.data</code> section now, by dragging it from the toolbox to the bottom of the program, after the last line of assembly code.</li>
+                }
+
+        @if (section >= 1)
+                {
+                    <hr />
+        <li>Now that we have a <code>.data</code> section, we can assign some memory space using directives</li>
+        <li>You can find the directives in the Memory category</li>
+        <li>For example, try adding the <code>.word</code> directive.</li>
+                }
+        @if (section >= 2)
+                {
+        <hr />
+        <li><code>.word</code> is used to reserve space for a single number and give it some initial value</li>
+        <li>This can be useful for creating variables that you can use in your program!</li>
+        <li>Insert a value into the <code>.word</code> block you've created to initialise it with the value <code>10</code>.</li>
+                }
+        @if (section >= 3)
+                {
+        <hr />
+        <li>Great work! Make sure that you can compile your code, ask fix any errors that appear</li>
+        <li>For example, if you have any instruction blocks below <code>.data</code>, it will not compile properly</li>
+        <li>Once it has compiled, look at the RAM tab to see where this word has been allocated</li>
+        <li>The memory allocated by <code>.data</code> should be found below the section of memory allocated to your program</li>
+        <li>What Value does the RAM tab show for <code>.word 10</code>?</li>
+        <input id="inputA" @oninput="OnInputMessageChanged" placeholder="Enter message" />
+        <label class="inputCheckmark" id="inputCheckmarkA" for="inputA">?</label>
+                }
+        @if (section >= 4)
+                {
+        <hr />
+        <li>Correct! This is the hex value of 10</li>
+        <li>So we have successfully used <code>.word</code> to initialise a variable with value 10</li>
+        <li>However, to use this variable we should give it a name</li>
+        <li>Drag a new label (from the Branch category) to above the <code>.word</code> block and give it recognisable name</li>
+        <li>After recompiling, you should see this name appear next to your stored value in RAM as a label</li>
+        <li>We can read and write values to this memory address via this label</li>
+        <li>This is done using the <code>lw</code> and <code>sw</code> instructions in the Memory category</li>
+        <li>We will use these instructions to write a simple program that adds one to our variable stored in memory</li>
+        <li>Begin by dragging <code>lw</code> and <code>sw</code> instructions into the <code>.text</code> section, below the main label. </li>
+                }
+        @if (section >= 5)
+                {
+        <hr />
+        <li>We can't modify the values in memory directly, we need to load it into into a register first</li>
+        <li>So, lets load the word from memory into register 1 by filling out <code>lw</code></li>
+        <li>The first box of <code>lw</code> needs to contain the destination register, <code>$1</code></li>
+        <li>The second box needs to contain the name of our variable, i.e. the label above the <code>.word</code> </li>
+        <li>The third box will be useful later, for now just enter <code>$0</code> </li>
+        <li>The <code>sw</code> instruction is similar, but the first box is the register whose value we want to store in memory</li>
+        <li>Fill out both the <code>lw</code> and <code>sw</code> instructions with <code>$1</code>, your label name, and <code>$0</code> </li>
+        <li>This will copy the value from memory into $1 and back again </li>
+        <li>Check that this works by compiling and running the program and checking the value of <code>$1</code> in the GP Registers tab. </li>
+                }
+        @if (section >= 6)
+                {
+        <hr />
+        <li>Great! The value 10 has successfully been loaded.</li>
+        <li>Next, insert an <code>addi</code> instruction inbetween <code>lw</code> and <code>sw</code> that adds 1 to <code>$1</code> </li>
+        <li>This will increment the value before storing it back in memory</li>
+        <li>Check that this works by compiling and running the program and checking the value of the variable has changed in the RAM tab. </li>
+                }
+        @if (section >= 7)
+                {
+        <hr />
+        <li>Great! This pattern of using <code>lw</code> and <code>sw</code> instructions can be reused whenever you want to update a value in memory!</li>
+                }
+        
+
+        @if (section == 100)
+                {
+        <hr />
+        <li> Congrats, you did it! </li>
+                JSRuntime.InvokeVoidAsync("levelCompleted");
+                }
+    </ul>
+    </div>
+    ;
+
+    public RenderFragment UnlockDiv =>
+    @<div>
+    <ul><li>The section hasn't been unlocked yet</li>
+    <li>You can press "Back" below or press "Unlock" to jump to this section now</li>
+    </ul>
+   
+        <p></p>
+        <button class="unlock" @onclick="Unlock">
+            Unlock
+        </button>
+    </div>;
+    public RenderFragment Block2 =>
+    @<div>
+    <h1>Handling Strings with .ascii</h1>
+    <ul>
+    @if (section < 7) {
+        @UnlockDiv
+    }
+                {
+        @if (section >= 7)
+                {
+        <li>In this exercise we'll be taking a closer look at <code>.data</code> and <code>.bss</code></li>
+        <li>These are two sections of a WRAMP program, similar to <code>.text</code></li>
+        <li>The <code>.text</code> section is where you put all your WRAMP assembly code</li>
+        <li>The <code>.data</code> section is where you can reserve memory and give it some initial values</li>
+        <li>Try adding a <code>.data</code> section now, by dragging it from the toolbox to the bottom of the program, after the last line of assembly code.</li>
+                }
+ </ul>
+    </div>
+    ;
+
+public RenderFragment Instructions => @<div> 
+   @switch (block) {
+   case 0:
+        @Block1
+        break;
+   case 1:
+       @Block2
+        break;
+   }
+   
+    <div class="nav-buttons">
+        <button @onclick="Prev" disabled="@(block == 0)">Back</button>
+        <button @onclick="Next" disabled="@(block == 1)">Next</button>
+    </div>
+   
+</div>;
+
+@code {
+    void Next()
+    {
+        if (block < 1)
+            block++;
+    }
+
+    void Prev()
+    {
+        if (block > 0)
+            block--;
+    }
+    void Unlock()
+    {
+        if (block == 1)
+            section = 7;
+    }
+}
+
+    public string maxInstances = "{ 'global': 1}";
+
+    public Toolbox toolbox = new Toolbox{
+        contents = new List<Category>() {
+            new Category {
+                name = "Sections",
+                categorystyle = "sectionCategory",
+                contents = new List<Block>() {
+                    new Block { type = "textHead" },
+                    new Block { type = "global" },
+                    new Block { type = "dataHead" },
+                    new Block { type = "bssHead" }
+                }
+            },
+            new Category {
+                name = "Branch",
+                categorystyle = "branchCategory",
+                contents = new List<Block>() {
+                    new Block { type = "label" },
+                    new Block { type = "jump" },
+                    new Block { type = "jumpRegister" },
+                    new Block { type = "branchOn" }
+                }
+            },
+            new Category {
+                name = "Memory",
+                categorystyle = "memoryCategory",
+                contents = new List<Block>() {
+                    new Block { type = "loadWord" },
+                    new Block { type = "storeWord" },
+                    new Block { type = "word" },
+                    new Block { type = "asciiz" },
+                    new Block { type = "ascii" },
+                    new Block { type = "space" }
+                }
+            },
+            new Category {
+                name = "Arithmetic",
+                categorystyle = "arithmeticCategory",
+                contents = new List<Block>() {
+                    new Block { type = "arithmetic" },
+                    new Block { type = "arithmeticUnsigned" },
+                    new Block { type = "arithmeticImmediate" },
+                    new Block { type = "arithmeticUnsignedImmediate" },
+                    new Block { type = "loadHighImmediate" },
+                }
+            },
+            new Category {
+                name = "Logic",
+                categorystyle = "logicCategory",
+                contents = new List<Block>() {
+                    new Block { type = "bitwise" },
+                    new Block { type = "bitwiseImmediate" },
+                    new Block { type = "shift" },
+                    new Block { type = "shiftImmediate" },
+                }
+            },
+            new Category {
+                name = "Conditional",
+                categorystyle = "conditionalCategory",
+                contents = new List<Block>() {
+                    new Block { type = "setOn" },
+                    new Block { type = "setOnUnsigned" },
+                    new Block { type = "setOnImmediate" },
+                    new Block { type = "setOnUnsignedImmediate" },
+                }
+            }
+        }
+    };
+
+    public string snippet = """
+    {"blocks":{"languageVersion":0,"blocks":[{"type":"textHead","id":"v]U5TNuit7lP9=:fnDM6","x":294,"y":39,"fields":{"instruction":".text"},"next":{"block":{"type":"global","id":"4[LIfd9t[ret|z[~yMnw","fields":{"instruction":".global main"},"next":{"block":{"type":"label","id":"fi=U|KG(6c~86_,/A9z?","fields":{"label":"main"}}}}}},{"type":"jumpRegister","id":"OC3J!8/m:znY)N}xM8U@","x":290,"y":171,"fields":{"instruction":"jr","register":"$ra"}}]}}
+    """;
+}
