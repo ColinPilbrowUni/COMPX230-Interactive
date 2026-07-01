@@ -1,0 +1,265 @@
+@page "/levelFive"
+@using RexSimulator.Hardware
+@using BlazorApp.Pages.Levels.LevelFiveParts
+@inject IJSRuntime JSRuntime
+@inject ChecklistStateStore ChecklistState
+@implements IDisposable
+
+<Level @ref="levelComponent" Title="Memory" BoardChanged="HandleBoardChanged" UIComponents="@CurrentComponents" Toolbox="@CurrentToolbox" WSIMInstructions="@Instructions" MainInstructions=null startingWorkspace="@CurrentStartingWorkspace" maxInstances="@CurrentMaxInstances" Library="@CurrentLibrary" />
+
+@code {
+	public Level? levelComponent;
+	public LevelComponents lc = new();
+	public WSIM? WSIM;
+	public RexBoard? board;
+
+	private Data? dataPartRef;
+	private Strings? stringsPartRef;
+	private Bss? bssPartRef;
+	private LevelGroupGateway gateway = default!;
+
+	private UIComponents CurrentComponents => gateway.CurrentPartIndex switch
+	{
+		0 => Data.Components,
+		1 => Strings.Components,
+		_ => Bss.Components
+	};
+
+	private Toolbox CurrentToolbox => gateway.CurrentPartIndex switch
+	{
+		0 => Data.Toolbox,
+		1 => Strings.Toolbox,
+		_ => Bss.Toolbox
+	};
+
+	private string CurrentStartingWorkspace => gateway.CurrentPartIndex switch
+	{
+		0 => Data.StartingWorkspace,
+		1 => Strings.StartingWorkspace,
+		_ => Bss.StartingWorkspace
+	};
+
+	private string? CurrentMaxInstances => gateway.CurrentPartIndex switch
+	{
+		0 => Data.MaxInstances,
+		1 => Strings.MaxInstances,
+		_ => Bss.MaxInstances
+	};
+
+	private string[][]? CurrentLibrary => gateway.CurrentPartIndex switch
+	{
+		0 => Data.Library,
+		1 => Strings.Library,
+		_ => Bss.Library
+	};
+
+	protected override void OnInitialized()
+	{
+		gateway = new LevelGroupGateway("levelFive", new[] { Data.GroupPart, Strings.GroupPart, Bss.GroupPart });
+		ChecklistState.SectionSelectionRequested += HandleSectionSelectionRequested;
+	}
+
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		if (!firstRender)
+		{
+			return;
+		}
+
+		if (levelComponent != null && levelComponent.wsimComponent != null)
+		{
+			board = levelComponent.wsimComponent.board;
+			WSIM = levelComponent.wsimComponent;
+		}
+
+		lc.SetJSRuntime(JSRuntime);
+		await gateway.InitializeAsync(JSRuntime, ChecklistState);
+		await ApplyCurrentPartConfig();
+		await HandleBoardChanged();
+		StateHasChanged();
+	}
+
+	private void HandleSectionSelectionRequested(string levelId, int stepIndex, ChecklistStepStatus status)
+	{
+		if (!string.Equals(levelId, gateway.LevelId, StringComparison.OrdinalIgnoreCase))
+		{
+			return;
+		}
+
+		_ = InvokeAsync(async () =>
+		{
+			await ApplyChecklistSectionSelection(stepIndex, status);
+		});
+	}
+
+	private async Task ApplyChecklistSectionSelection(int stepIndex, ChecklistStepStatus status)
+	{
+		if (!gateway.IsValidIndex(stepIndex))
+		{
+			return;
+		}
+
+		await gateway.SelectPartAsync(stepIndex, JSRuntime, ChecklistState);
+		await ApplyCurrentPartConfig();
+
+		lc.Section = GetSectionFromChecklistSelection(status);
+
+		StateHasChanged();
+		await Task.Yield();
+		await HandleBoardChanged();
+		StateHasChanged();
+	}
+
+	private int GetSectionFromChecklistSelection(ChecklistStepStatus status)
+	{
+		if (gateway.CurrentPartIndex == 0)
+		{
+			return status == ChecklistStepStatus.Complete ? 7 : Math.Clamp(lc.Section, 0, 6);
+		}
+
+		return 0;
+	}
+
+	private async Task ApplyCurrentPartConfig()
+	{
+		if (gateway.CurrentPartIndex == 0)
+		{
+			lc.SetProgressScope(Data.ProgressScopeId);
+			await lc.getProgress();
+			await lc.UpdateToolbox(Data.Toolbox);
+			await JSRuntime.InvokeVoidAsync("loadSavedOrPresetWorkspace", Data.BlocklyStorageKey, Data.StartingWorkspace);
+		}
+		else if (gateway.CurrentPartIndex == 1)
+		{
+			lc.SetProgressScope(Strings.ProgressScopeId);
+			await lc.getProgress();
+			await lc.UpdateToolbox(Strings.Toolbox);
+			await JSRuntime.InvokeVoidAsync("loadSavedOrPresetWorkspace", Strings.BlocklyStorageKey, Strings.StartingWorkspace);
+		}
+		else
+		{
+			lc.SetProgressScope(Bss.ProgressScopeId);
+			await lc.getProgress();
+			await lc.UpdateToolbox(Bss.Toolbox);
+			await JSRuntime.InvokeVoidAsync("loadSavedOrPresetWorkspace", Bss.BlocklyStorageKey, Bss.StartingWorkspace);
+		}
+
+		ChecklistState.SetSelectedStepIndex(gateway.LevelId, gateway.CurrentPartIndex);
+		SyncChecklistState();
+	}
+
+	public async Task HandleBoardChanged()
+	{
+		if (levelComponent == null || levelComponent.wsimComponent == null || WSIM == null || board == null)
+		{
+			return;
+		}
+
+		if (gateway.CurrentPartIndex == 0)
+		{
+			if (dataPartRef != null)
+			{
+				await dataPartRef.HandleBoardChanged();
+			}
+		}
+		else if (gateway.CurrentPartIndex == 1)
+		{
+			if (stringsPartRef != null)
+			{
+				await stringsPartRef.HandleBoardChanged();
+			}
+		}
+		else
+		{
+			if (bssPartRef != null)
+			{
+				await bssPartRef.HandleBoardChanged();
+			}
+		}
+	}
+
+	private Task HandlePartProgressChanged((int Section, bool StepComplete, bool TriggerLevelCompleted) progress)
+	{
+		lc.Section = progress.Section;
+
+		if (progress.TriggerLevelCompleted)
+		{
+			lc.LevelCompleted();
+		}
+
+		SyncChecklistState();
+		StateHasChanged();
+		return Task.CompletedTask;
+	}
+
+	private void SyncChecklistState()
+	{
+		if (gateway.CurrentPartIndex == 0)
+		{
+			gateway.SetPartStatusWithoutDowngrade(ChecklistState, 0, lc.Section >= 7 ? ChecklistStepStatus.Complete : ChecklistStepStatus.Started);
+			gateway.SetPartStatusWithoutDowngrade(ChecklistState, 1, ChecklistStepStatus.Incomplete);
+			gateway.SetPartStatusWithoutDowngrade(ChecklistState, 2, ChecklistStepStatus.Incomplete);
+			ChecklistState.SetSelectedStepIndex(gateway.LevelId, 0);
+			return;
+		}
+
+		if (gateway.CurrentPartIndex == 1)
+		{
+			gateway.SetPartStatusWithoutDowngrade(ChecklistState, 0, ChecklistStepStatus.Complete);
+			gateway.SetPartStatusWithoutDowngrade(ChecklistState, 1, ChecklistStepStatus.Started);
+			gateway.SetPartStatusWithoutDowngrade(ChecklistState, 2, ChecklistStepStatus.Incomplete);
+			ChecklistState.SetSelectedStepIndex(gateway.LevelId, 1);
+			return;
+		}
+
+		gateway.SetPartStatusWithoutDowngrade(ChecklistState, 0, ChecklistStepStatus.Complete);
+		gateway.SetPartStatusWithoutDowngrade(ChecklistState, 1, ChecklistStepStatus.Complete);
+		gateway.SetPartStatusWithoutDowngrade(ChecklistState, 2, ChecklistStepStatus.Started);
+		ChecklistState.SetSelectedStepIndex(gateway.LevelId, 2);
+	}
+
+	public async Task NextSection()
+	{
+		if (gateway.CurrentPartIndex == 0 && lc.Section >= 7)
+		{
+			await gateway.SelectPartAsync(1, JSRuntime, ChecklistState);
+			lc.UncheckAllObjectives();
+			await ApplyCurrentPartConfig();
+			StateHasChanged();
+			await Task.Yield();
+			await HandleBoardChanged();
+			StateHasChanged();
+		}
+		else if (gateway.CurrentPartIndex == 1)
+		{
+			await gateway.SelectPartAsync(2, JSRuntime, ChecklistState);
+			lc.UncheckAllObjectives();
+			await ApplyCurrentPartConfig();
+			StateHasChanged();
+			await Task.Yield();
+			await HandleBoardChanged();
+			StateHasChanged();
+		}
+	}
+
+	public RenderFragment Instructions =>
+	@<div>
+		@if (gateway.CurrentPartIndex == 0)
+		{
+			<Data @ref="dataPartRef" Section="@lc.Section" NextSection="NextSection" Board="board" LevelComponents="lc" ProgressChanged="HandlePartProgressChanged" />
+		}
+		else if (gateway.CurrentPartIndex == 1)
+		{
+			<Strings @ref="stringsPartRef" Section="@lc.Section" NextSection="NextSection" ProgressChanged="HandlePartProgressChanged" />
+		}
+		else
+		{
+			<Bss @ref="bssPartRef" Section="@lc.Section" ProgressChanged="HandlePartProgressChanged" />
+		}
+	</div>;
+
+	public void Dispose()
+	{
+		ChecklistState.SectionSelectionRequested -= HandleSectionSelectionRequested;
+	}
+}

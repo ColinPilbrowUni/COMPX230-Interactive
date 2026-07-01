@@ -71,9 +71,35 @@
         lc.SetJSRuntime(JSRuntime);
         await MigrateLegacyProgressIfNeeded();
         await gateway.InitializeAsync(JSRuntime, ChecklistState);
+        await SyncChecklistStateFromStoredProgress();
         await ApplyCurrentPartConfig();
         await HandleBoardChanged();
         StateHasChanged();
+    }
+
+    private async Task SyncChecklistStateFromStoredProgress()
+    {
+        int shiftingSection = await JSRuntime.InvokeAsync<int>("getScopedProgress", Shifting.ProgressScopeId, "Section");
+        int maskingSection = await JSRuntime.InvokeAsync<int>("getScopedProgress", Masking.ProgressScopeId, "Section");
+        int capitalizationSection = await JSRuntime.InvokeAsync<int>("getScopedProgress", Capitalization.ProgressScopeId, "Section");
+
+        ChecklistStepStatus shiftingStatus = shiftingSection >= 2
+            ? ChecklistStepStatus.Complete
+            : ChecklistStepStatus.Started;
+
+        bool maskingUnlockedOrVisited = maskingSection > 0 || shiftingSection >= 2 || gateway.CurrentPartIndex >= 1;
+        ChecklistStepStatus maskingStatus = maskingSection >= 4
+            ? ChecklistStepStatus.Complete
+            : (maskingUnlockedOrVisited ? ChecklistStepStatus.Started : ChecklistStepStatus.Incomplete);
+
+        bool capitalizationUnlockedOrVisited = capitalizationSection > 0 || maskingSection >= 4 || gateway.CurrentPartIndex >= 2;
+        ChecklistStepStatus capitalizationStatus = capitalizationSection >= 2
+            ? ChecklistStepStatus.Complete
+            : (capitalizationUnlockedOrVisited ? ChecklistStepStatus.Started : ChecklistStepStatus.Incomplete);
+
+        gateway.SetPartStatusWithoutDowngrade(ChecklistState, 0, shiftingStatus);
+        gateway.SetPartStatusWithoutDowngrade(ChecklistState, 1, maskingStatus);
+        gateway.SetPartStatusWithoutDowngrade(ChecklistState, 2, capitalizationStatus);
     }
 
     private async Task MigrateLegacyProgressIfNeeded()

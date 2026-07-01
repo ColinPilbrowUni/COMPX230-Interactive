@@ -1,0 +1,40 @@
+<section>
+	<h2>Strings</h2>
+	<p>Coming soon.</p>
+
+	<button class="btn btn-primary" @onclick="NextSection">Next Section</button>
+</section>
+
+@code {
+	public static readonly LevelGroupPart GroupPart = new("strings", "Strings", ProgressScopeId);
+
+	public const string ProgressScopeId = "levelFiveStrings";
+	public const string BlocklyStorageKey = "levelFiveStringsBlockly";
+
+	public static UIComponents Components { get; } = new();
+
+	public static Toolbox Toolbox { get; } = new()
+	{
+		contents = new List<Category>()
+	};
+
+	public static string StartingWorkspace { get; } = "";
+
+	public static string? MaxInstances => null;
+
+	public static string[][]? Library => null;
+
+	[Parameter]
+	public int Section { get; set; }
+
+	[Parameter]
+	public EventCallback NextSection { get; set; }
+
+	[Parameter]
+	public EventCallback<(int Section, bool StepComplete, bool TriggerLevelCompleted)> ProgressChanged { get; set; }
+
+	public Task HandleBoardChanged()
+	{
+		return ProgressChanged.InvokeAsync((Section, false, false));
+	}
+}

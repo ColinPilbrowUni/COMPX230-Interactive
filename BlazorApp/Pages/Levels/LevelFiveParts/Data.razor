@@ -1,0 +1,241 @@
+@using RexSimulator.Hardware
+@inject IJSRuntime JSRuntime
+
+<section>
+	<h2>.data</h2>
+	<h3>Loading and storing .data</h3>
+
+	<ul>
+		@if (Section >= 0)
+		{
+			<li>In this exercise we'll be taking a closer look at <code>.data</code> and <code>.bss</code>.</li>
+			<li>These are two sections of a WRAMP program, similar to <code>.text</code>.</li>
+			<li>The <code>.text</code> section is where you put all your WRAMP assembly code.</li>
+			<li>The <code>.data</code> section is where you can reserve memory and give it initial values.</li>
+			<li>Try adding a <code>.data</code> section now by dragging it from the toolbox to the bottom of the program.</li>
+		}
+
+		@if (Section >= 1)
+		{
+			<li>Now that we have a <code>.data</code> section, assign memory space using directives.</li>
+			<li>You can find directives in the Memory category.</li>
+			<li>For example, add the <code>.word</code> directive.</li>
+		}
+
+		@if (Section >= 2)
+		{
+			<li><code>.word</code> reserves space for a single number and gives it an initial value.</li>
+			<li>Insert a value into the <code>.word</code> block and initialize it with <code>10</code>.</li>
+		}
+
+		@if (Section >= 3)
+		{
+			<li>Compile your code and fix any errors that appear.</li>
+			<li>Check the RAM tab to find where this word was allocated.</li>
+			<li>What value does RAM show for <code>.word 10</code>?</li>
+			<input id="inputA" @oninput="OnInputMessageChanged" placeholder="Enter message" />
+			<label class="inputCheckmark" id="inputCheckmarkA" for="inputA">?</label>
+		}
+
+		@if (Section >= 4)
+		{
+			<li>Correct, this is the hex value for 10.</li>
+			<li>Add a label above <code>.word</code>, then use <code>lw</code> and <code>sw</code> to read and write that value.</li>
+			<li>Place <code>lw</code> and <code>sw</code> in the <code>.text</code> section below <code>main</code>.</li>
+		}
+
+		@if (Section >= 5)
+		{
+			<li>Load the value into register <code>$1</code> using <code>lw</code>.</li>
+			<li>Use your label name and <code>$0</code> where needed in both <code>lw</code> and <code>sw</code>.</li>
+			<li>Run and confirm <code>$1</code> becomes 10 in the GP Registers tab.</li>
+		}
+
+		@if (Section >= 6)
+		{
+			<li>Insert <code>addi $1, $1, 1</code> between <code>lw</code> and <code>sw</code>.</li>
+			<li>Run again and verify the stored RAM value is incremented.</li>
+		}
+
+		@if (Section >= 7)
+		{
+			<li>Great! You can now load, modify, and store values through memory labels.</li>
+			<li>
+				<button class="btn btn-primary" @onclick="NextSection">Next Section</button>
+			</li>
+		}
+	</ul>
+</section>
+
+@code {
+	public static readonly LevelGroupPart GroupPart = new("data", ".data", ProgressScopeId);
+
+	public const string ProgressScopeId = "levelFiveData";
+	public const string BlocklyStorageKey = "levelFiveDataBlockly";
+
+	public static UIComponents Components { get; } = new(
+		Blockly: true,
+		Visualiser: true,
+		Code: true,
+		GPRegisters: true,
+		RAM: true);
+
+	public static Toolbox Toolbox { get; } = new()
+	{
+		contents = new List<Category>() {
+			new Category {
+				name = "Sections",
+				categorystyle = "sectionCategory",
+				contents = new List<Block>() {
+					new Block { type = "textHead" },
+					new Block { type = "global" },
+					new Block { type = "dataHead" },
+					new Block { type = "bssHead" }
+				}
+			},
+			new Category {
+				name = "Branch",
+				categorystyle = "branchCategory",
+				contents = new List<Block>() {
+					new Block { type = "label" },
+					new Block { type = "jump" },
+					new Block { type = "jumpRegister" },
+					new Block { type = "branchOn" }
+				}
+			},
+			new Category {
+				name = "Memory",
+				categorystyle = "memoryCategory",
+				contents = new List<Block>() {
+					new Block { type = "loadWord" },
+					new Block { type = "storeWord" },
+					new Block { type = "word" },
+					new Block { type = "asciiz" },
+					new Block { type = "ascii" },
+					new Block { type = "space" }
+				}
+			},
+			new Category {
+				name = "Arithmetic",
+				categorystyle = "arithmeticCategory",
+				contents = new List<Block>() {
+					new Block { type = "arithmetic" },
+					new Block { type = "arithmeticUnsigned" },
+					new Block { type = "arithmeticImmediate" },
+					new Block { type = "arithmeticUnsignedImmediate" },
+					new Block { type = "loadHighImmediate" },
+				}
+			},
+			new Category {
+				name = "Logic",
+				categorystyle = "logicCategory",
+				contents = new List<Block>() {
+					new Block { type = "bitwise" },
+					new Block { type = "bitwiseImmediate" },
+					new Block { type = "shift" },
+					new Block { type = "shiftImmediate" },
+				}
+			},
+			new Category {
+				name = "Conditional",
+				categorystyle = "conditionalCategory",
+				contents = new List<Block>() {
+					new Block { type = "setOn" },
+					new Block { type = "setOnUnsigned" },
+					new Block { type = "setOnImmediate" },
+					new Block { type = "setOnUnsignedImmediate" },
+				}
+			}
+		}
+	};
+
+	public static string StartingWorkspace { get; } = """
+	{"blocks":{"languageVersion":0,"blocks":[{"type":"textHead","id":"v]U5TNuit7lP9=:fnDM6","x":294,"y":39,"fields":{"instruction":".text"},"next":{"block":{"type":"global","id":"4[LIfd9t[ret|z[~yMnw","fields":{"instruction":".global main"},"next":{"block":{"type":"label","id":"fi=U|KG(6c~86_,/A9z?","fields":{"label":"main"}}}}}},{"type":"jumpRegister","id":"OC3J!8/m:znY)N}xM8U@","x":290,"y":171,"fields":{"instruction":"jr","register":"$ra"}}]}}
+	""";
+
+	public static string? MaxInstances { get; } = "{ 'global': 1}";
+
+	public static string[][]? Library => null;
+
+	[Parameter]
+	public int Section { get; set; }
+
+	[Parameter]
+	public EventCallback NextSection { get; set; }
+
+	[Parameter]
+	public RexBoard? Board { get; set; }
+
+	[Parameter]
+	public LevelComponents? LevelComponents { get; set; }
+
+	[Parameter]
+	public EventCallback<(int Section, bool StepComplete, bool TriggerLevelCompleted)> ProgressChanged { get; set; }
+
+	public async Task HandleBoardChanged()
+	{
+		if (Board == null || LevelComponents == null)
+		{
+			return;
+		}
+
+		string code = await LevelComponents.GetUserCode();
+
+		if (Section == 0 && code.Contains(".data"))
+		{
+			Section = 1;
+		}
+		if (Section == 1 && code.Contains(".word"))
+		{
+			Section = 2;
+		}
+		if (Section == 2 && code.Contains(".word 10"))
+		{
+			Section = 3;
+		}
+		if (Section == 4 && code.Contains("lw") && code.Contains("sw"))
+		{
+			Section = 5;
+		}
+		if (Section == 5 && Board.CPU.mGpRegisters.mRegisters[1] == 10)
+		{
+			Section = 6;
+		}
+		if (Section == 6)
+		{
+			bool correctValueStored = false;
+			for (int i = 0; i < 20; i++)
+			{
+				if (Board.RAM.mMemory[i] == 11)
+				{
+					correctValueStored = true;
+					break;
+				}
+			}
+
+			if (code.Contains("addi $1, $1, 1") && correctValueStored)
+			{
+				Section = 7;
+			}
+		}
+
+		bool stepComplete = Section >= 7;
+		await ProgressChanged.InvokeAsync((Section, stepComplete, false));
+	}
+
+	private async Task OnInputMessageChanged(ChangeEventArgs e)
+	{
+		string userInput = e.Value?.ToString() ?? string.Empty;
+		string normalized = userInput.Trim().ToUpperInvariant();
+
+		if (normalized == "0000000A" || normalized == "A")
+		{
+			await JSRuntime.InvokeVoidAsync("objectiveCheck", "inputCheckmarkA");
+			if (Section == 3)
+			{
+				Section = 4;
+				await ProgressChanged.InvokeAsync((Section, false, false));
+			}
+		}
+	}
+}

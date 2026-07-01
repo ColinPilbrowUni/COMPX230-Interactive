@@ -1,0 +1,35 @@
+<section>
+	<h2>.bss</h2>
+	<p>Coming soon.</p>
+</section>
+
+@code {
+	public static readonly LevelGroupPart GroupPart = new("bss", ".bss", ProgressScopeId);
+
+	public const string ProgressScopeId = "levelFiveBss";
+	public const string BlocklyStorageKey = "levelFiveBssBlockly";
+
+	public static UIComponents Components { get; } = new();
+
+	public static Toolbox Toolbox { get; } = new()
+	{
+		contents = new List<Category>()
+	};
+
+	public static string StartingWorkspace { get; } = "";
+
+	public static string? MaxInstances => null;
+
+	public static string[][]? Library => null;
+
+	[Parameter]
+	public int Section { get; set; }
+
+	[Parameter]
+	public EventCallback<(int Section, bool StepComplete, bool TriggerLevelCompleted)> ProgressChanged { get; set; }
+
+	public Task HandleBoardChanged()
+	{
+		return ProgressChanged.InvokeAsync((Section, false, false));
+	}
+}
