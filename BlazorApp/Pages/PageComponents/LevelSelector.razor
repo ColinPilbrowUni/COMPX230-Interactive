@@ -17,7 +17,7 @@
             <LevelNavItem href="levelTwo" name="#2" Steps="@NoSteps" />
             <LevelNavItem href="levelBranching" name="Branching" Steps="@NoSteps" />
             <LevelNavItem href="levelFour" name="Bitwise" Steps='@GetLevelSteps("levelFour")' LevelId="levelFour" SelectedStepIndex='@GetSelectedStepIndex("levelFour")' />
-            <LevelNavItem href="levelBss" name="BSS" Steps='@GetLevelSteps("levelFive")' LevelId="levelFive" SelectedStepIndex='@GetSelectedStepIndex("levelFive")' />
+            <LevelNavItem href="levelFive" name="Memory" Steps='@GetLevelSteps("levelFive")' LevelId="levelFive" SelectedStepIndex='@GetSelectedStepIndex("levelFive")' />
 
             <button class="btn btn-danger float-end my-2 ms-4" @onclick="ResetLevels" data-bs-toggle="modal" data-bs-target="#deleteModal" @ref="resetLevelButtonRef"> 
                 Reset Level Progress

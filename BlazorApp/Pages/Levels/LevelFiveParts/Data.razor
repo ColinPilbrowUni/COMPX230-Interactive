@@ -60,9 +60,8 @@
 		@if (Section >= 7)
 		{
 			<li>Great! You can now load, modify, and store values through memory labels.</li>
-			<li>
-				<button class="btn btn-primary" @onclick="NextSection">Next Section</button>
-			</li>
+			<button class="btn btn-primary" @onclick="NextSection">Next Section</button>
+
 		}
 	</ul>
 </section>
@@ -157,6 +156,20 @@
 
 	public static string[][]? Library => null;
 
+	private static readonly string[] CompletionProgressTypes =
+	{
+		"Checkpoint0Complete",
+		"Checkpoint1Complete",
+		"Checkpoint2Complete",
+		"Checkpoint3Complete",
+		"Checkpoint4Complete",
+		"Checkpoint5Complete",
+		"Checkpoint6Complete"
+	};
+
+	private readonly bool[] checkpointComplete = new bool[CompletionProgressTypes.Length];
+	private bool completionStateLoaded;
+
 	[Parameter]
 	public int Section { get; set; }
 
@@ -179,29 +192,17 @@
 			return;
 		}
 
+		await EnsureCompletionStateLoaded();
+
 		string code = await LevelComponents.GetUserCode();
 
-		if (Section == 0 && code.Contains(".data"))
-		{
-			Section = 1;
-		}
-		if (Section == 1 && code.Contains(".word"))
-		{
-			Section = 2;
-		}
-		if (Section == 2 && code.Contains(".word 10"))
-		{
-			Section = 3;
-		}
-		if (Section == 4 && code.Contains("lw") && code.Contains("sw"))
-		{
-			Section = 5;
-		}
-		if (Section == 5 && Board.CPU.mGpRegisters.mRegisters[1] == 10)
-		{
-			Section = 6;
-		}
-		if (Section == 6)
+		await TryCompleteCheckpointAsync(0, code.Contains(".data", StringComparison.Ordinal));
+		await TryCompleteCheckpointAsync(1, checkpointComplete[0] && code.Contains(".word", StringComparison.Ordinal));
+		await TryCompleteCheckpointAsync(2, checkpointComplete[1] && code.Contains(".word 10", StringComparison.Ordinal));
+		await TryCompleteCheckpointAsync(4, checkpointComplete[3] && code.Contains("lw", StringComparison.Ordinal) && code.Contains("sw", StringComparison.Ordinal));
+		await TryCompleteCheckpointAsync(5, checkpointComplete[4] && Board.CPU.mGpRegisters.mRegisters[1] == 10);
+
+		if (checkpointComplete[5])
 		{
 			bool correctValueStored = false;
 			for (int i = 0; i < 20; i++)
@@ -213,10 +214,13 @@
 				}
 			}
 
-			if (code.Contains("addi $1, $1, 1") && correctValueStored)
-			{
-				Section = 7;
-			}
+			await TryCompleteCheckpointAsync(6, code.Contains("addi $1, $1, 1", StringComparison.Ordinal) && correctValueStored);
+		}
+
+		int unlockedSection = GetUnlockedSection();
+		if (unlockedSection > Section)
+		{
+			Section = unlockedSection;
 		}
 
 		bool stepComplete = Section >= 7;
@@ -225,17 +229,85 @@
 
 	private async Task OnInputMessageChanged(ChangeEventArgs e)
 	{
+		await EnsureCompletionStateLoaded();
+
 		string userInput = e.Value?.ToString() ?? string.Empty;
 		string normalized = userInput.Trim().ToUpperInvariant();
 
 		if (normalized == "0000000A" || normalized == "A")
 		{
 			await JSRuntime.InvokeVoidAsync("objectiveCheck", "inputCheckmarkA");
-			if (Section == 3)
+			if (checkpointComplete[2])
 			{
-				Section = 4;
+				await TryCompleteCheckpointAsync(3, true);
+				int unlockedSection = GetUnlockedSection();
+				if (unlockedSection > Section)
+				{
+					Section = unlockedSection;
+				}
 				await ProgressChanged.InvokeAsync((Section, false, false));
 			}
 		}
+	}
+
+	private async Task EnsureCompletionStateLoaded()
+	{
+		if (completionStateLoaded)
+		{
+			return;
+		}
+
+		bool hasStoredCompletion = false;
+		for (int i = 0; i < CompletionProgressTypes.Length; i++)
+		{
+			checkpointComplete[i] = await JSRuntime.InvokeAsync<int>("getScopedProgress", ProgressScopeId, CompletionProgressTypes[i]) == 1;
+			hasStoredCompletion |= checkpointComplete[i];
+		}
+
+		if (!hasStoredCompletion && Section > 0)
+		{
+			int completedFromSection = Math.Min(Section, CompletionProgressTypes.Length);
+			for (int i = 0; i < completedFromSection; i++)
+			{
+				checkpointComplete[i] = true;
+				await JSRuntime.InvokeVoidAsync("storeScopedProgress", ProgressScopeId, CompletionProgressTypes[i], 1);
+			}
+		}
+
+		int unlockedSection = GetUnlockedSection();
+		if (unlockedSection > Section)
+		{
+			Section = unlockedSection;
+		}
+
+		completionStateLoaded = true;
+	}
+
+	private async Task<bool> TryCompleteCheckpointAsync(int checkpointIndex, bool conditionMet)
+	{
+		if (!conditionMet || checkpointComplete[checkpointIndex])
+		{
+			return false;
+		}
+
+		checkpointComplete[checkpointIndex] = true;
+		await JSRuntime.InvokeVoidAsync("storeScopedProgress", ProgressScopeId, CompletionProgressTypes[checkpointIndex], 1);
+		return true;
+	}
+
+	private int GetUnlockedSection()
+	{
+		int unlockedSection = 0;
+		for (int i = 0; i < checkpointComplete.Length; i++)
+		{
+			if (!checkpointComplete[i])
+			{
+				break;
+			}
+
+			unlockedSection = i + 1;
+		}
+
+		return unlockedSection;
 	}
 }
