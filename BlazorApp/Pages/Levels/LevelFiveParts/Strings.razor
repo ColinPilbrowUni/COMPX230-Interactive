@@ -1,8 +1,57 @@
+@inject IJSRuntime JSRuntime
+
 <section>
 	<h2>Strings</h2>
-	<p>Coming soon.</p>
+	<h3>Using Strings in .data</h3>
 
-	<button class="btn btn-primary" @onclick="NextSection">Next Section</button>
+	<ul>
+		@if (Section >= 0)
+		{
+			<li>The <code>.data</code> section can also store text, not just numbers.</li>
+			<li>Strings are stored in memory as ASCII values, one character at a time.</li>
+			<li>Question 1: What WRAMP directive lets you store <code>"hello"</code> in a single line?</li>
+			<input id="stringsInputOne" @oninput="OnInputDirectiveChanged" placeholder="Enter directive" />
+			<label class="inputCheckmark" id="stringsInputOneCheckmark" for="stringsInputOne"><i class="bi bi-check-lg"></i></label>
+		}
+
+		@if (Section >= 1)
+		{
+			<li>Correct.</li>
+			<li>Question 2: How many rows of memory does <code>.asciiz "hello"</code> use?</li>
+			<input id="stringsInputTwo" @oninput="OnInputRowsChanged" placeholder="Enter row count" />
+			<label class="inputCheckmark" id="stringsInputTwoCheckmark" for="stringsInputTwo"><i class="bi bi-check-lg"></i></label>
+		}
+
+		@if (Section >= 2)
+		{
+			<li>Nice work.</li>
+			<li>Question 3: In the following program, which character's ASCII value is loaded into <code>$2</code>?</li>
+		}
+	</ul>
+
+	@if (Section >= 2)
+	{
+		<pre><code>.text
+.global main
+
+main:
+  addi $1, $0, 3
+  lw $2, value($1)
+  jr $ra
+
+.data
+value:
+  .asciiz "alphabet"</code></pre>
+
+		<input id="stringsInputThree" @oninput="OnInputCharacterChanged" placeholder="Enter character" />
+		<label class="inputCheckmark" id="stringsInputThreeCheckmark" for="stringsInputThree"><i class="bi bi-check-lg"></i></label>
+	}
+
+	@if (Section >= 3)
+	{
+		<p>All done. The answer is <code>h</code>.</p>
+		<button class="btn btn-primary" @onclick="NextSection">Next Section</button>
+	}
 </section>
 
 @code {
@@ -33,8 +82,88 @@
 	[Parameter]
 	public EventCallback<(int Section, bool StepComplete, bool TriggerLevelCompleted)> ProgressChanged { get; set; }
 
+	protected override void OnParametersSet()
+	{
+		if (Section >= 1)
+		{
+			_ = JSRuntime.InvokeVoidAsync("objectiveCheck", "stringsInputOneCheckmark");
+		}
+
+		if (Section >= 2)
+		{
+			_ = JSRuntime.InvokeVoidAsync("objectiveCheck", "stringsInputTwoCheckmark");
+		}
+
+		if (Section >= 3)
+		{
+			_ = JSRuntime.InvokeVoidAsync("objectiveCheck", "stringsInputThreeCheckmark");
+		}
+	}
+
+	private async Task OnInputDirectiveChanged(ChangeEventArgs e)
+	{
+		string userInput = e.Value?.ToString()?.Trim() ?? string.Empty;
+		string normalized = userInput.TrimStart('.').ToLowerInvariant();
+
+		if (normalized == "asciiz")
+		{
+			await JSRuntime.InvokeVoidAsync("objectiveCheck", "stringsInputOneCheckmark");
+			if (Section == 0)
+			{
+				Section = 1;
+				await ProgressChanged.InvokeAsync((Section, false, false));
+			}
+		}
+	}
+
+	private async Task OnInputRowsChanged(ChangeEventArgs e)
+	{
+		string userInput = e.Value?.ToString()?.Trim() ?? string.Empty;
+		string normalized = userInput.ToLowerInvariant();
+
+		if (normalized == "6" || normalized == "00000006" || normalized == "0x6" || normalized == "0x00000006")
+		{
+			await JSRuntime.InvokeVoidAsync("objectiveCheck", "stringsInputTwoCheckmark");
+			if (Section == 1)
+			{
+				Section = 2;
+				await ProgressChanged.InvokeAsync((Section, false, false));
+			}
+		}
+	}
+
+	private async Task OnInputCharacterChanged(ChangeEventArgs e)
+	{
+		string userInput = e.Value?.ToString()?.Trim() ?? string.Empty;
+
+		if (string.Equals(userInput, "h", StringComparison.OrdinalIgnoreCase))
+		{
+			await JSRuntime.InvokeVoidAsync("objectiveCheck", "stringsInputThreeCheckmark");
+			if (Section == 2)
+			{
+				Section = 3;
+				await ProgressChanged.InvokeAsync((Section, true, false));
+			}
+		}
+	}
+
 	public Task HandleBoardChanged()
 	{
+		if (Section >= 1)
+		{
+			_ = JSRuntime.InvokeVoidAsync("objectiveCheck", "stringsInputOneCheckmark");
+		}
+
+		if (Section >= 2)
+		{
+			_ = JSRuntime.InvokeVoidAsync("objectiveCheck", "stringsInputTwoCheckmark");
+		}
+
+		if (Section >= 3)
+		{
+			_ = JSRuntime.InvokeVoidAsync("objectiveCheck", "stringsInputThreeCheckmark");
+		}
+
 		return ProgressChanged.InvokeAsync((Section, false, false));
 	}
 }

@@ -74,9 +74,35 @@
 
 		lc.SetJSRuntime(JSRuntime);
 		await gateway.InitializeAsync(JSRuntime, ChecklistState);
+		await SyncChecklistStateFromStoredProgress();
 		await ApplyCurrentPartConfig();
 		await HandleBoardChanged();
 		StateHasChanged();
+	}
+
+	private async Task SyncChecklistStateFromStoredProgress()
+	{
+		int dataSection = await JSRuntime.InvokeAsync<int>("getScopedProgress", Data.ProgressScopeId, "Section");
+		int stringsSection = await JSRuntime.InvokeAsync<int>("getScopedProgress", Strings.ProgressScopeId, "Section");
+		int bssSection = await JSRuntime.InvokeAsync<int>("getScopedProgress", Bss.ProgressScopeId, "Section");
+
+		ChecklistStepStatus dataStatus = dataSection >= 7
+			? ChecklistStepStatus.Complete
+			: ChecklistStepStatus.Started;
+
+		bool stringsUnlockedOrVisited = stringsSection > 0 || dataSection >= 7 || gateway.CurrentPartIndex >= 1;
+		ChecklistStepStatus stringsStatus = stringsSection >= 3
+			? ChecklistStepStatus.Complete
+			: (stringsUnlockedOrVisited ? ChecklistStepStatus.Started : ChecklistStepStatus.Incomplete);
+
+		bool bssUnlockedOrVisited = bssSection > 0 || stringsSection >= 3 || gateway.CurrentPartIndex >= 2;
+		ChecklistStepStatus bssStatus = bssUnlockedOrVisited
+			? ChecklistStepStatus.Started
+			: ChecklistStepStatus.Incomplete;
+
+		gateway.SetPartStatusWithoutDowngrade(ChecklistState, 0, dataStatus);
+		gateway.SetPartStatusWithoutDowngrade(ChecklistState, 1, stringsStatus);
+		gateway.SetPartStatusWithoutDowngrade(ChecklistState, 2, bssStatus);
 	}
 
 	private void HandleSectionSelectionRequested(string levelId, int stepIndex, ChecklistStepStatus status)
@@ -114,10 +140,15 @@
 	{
 		if (gateway.CurrentPartIndex == 0)
 		{
-			return status == ChecklistStepStatus.Complete ? 7 : Math.Clamp(lc.Section, 0, 6);
+			return status == ChecklistStepStatus.Complete ? Math.Max(lc.Section, 7) : lc.Section;
 		}
 
-		return 0;
+		if (gateway.CurrentPartIndex == 1)
+		{
+			return status == ChecklistStepStatus.Complete ? Math.Max(lc.Section, 3) : lc.Section;
+		}
+
+		return lc.Section;
 	}
 
 	private async Task ApplyCurrentPartConfig()
@@ -126,22 +157,31 @@
 		{
 			lc.SetProgressScope(Data.ProgressScopeId);
 			await lc.getProgress();
-			await lc.UpdateToolbox(Data.Toolbox);
-			await JSRuntime.InvokeVoidAsync("loadSavedOrPresetWorkspace", Data.BlocklyStorageKey, Data.StartingWorkspace);
+			if (Data.Components.Blockly)
+			{
+				await lc.UpdateToolbox(Data.Toolbox);
+				await JSRuntime.InvokeVoidAsync("loadSavedOrPresetWorkspace", Data.BlocklyStorageKey, Data.StartingWorkspace);
+			}
 		}
 		else if (gateway.CurrentPartIndex == 1)
 		{
 			lc.SetProgressScope(Strings.ProgressScopeId);
 			await lc.getProgress();
-			await lc.UpdateToolbox(Strings.Toolbox);
-			await JSRuntime.InvokeVoidAsync("loadSavedOrPresetWorkspace", Strings.BlocklyStorageKey, Strings.StartingWorkspace);
+			if (Strings.Components.Blockly)
+			{
+				await lc.UpdateToolbox(Strings.Toolbox);
+				await JSRuntime.InvokeVoidAsync("loadSavedOrPresetWorkspace", Strings.BlocklyStorageKey, Strings.StartingWorkspace);
+			}
 		}
 		else
 		{
 			lc.SetProgressScope(Bss.ProgressScopeId);
 			await lc.getProgress();
-			await lc.UpdateToolbox(Bss.Toolbox);
-			await JSRuntime.InvokeVoidAsync("loadSavedOrPresetWorkspace", Bss.BlocklyStorageKey, Bss.StartingWorkspace);
+			if (Bss.Components.Blockly)
+			{
+				await lc.UpdateToolbox(Bss.Toolbox);
+				await JSRuntime.InvokeVoidAsync("loadSavedOrPresetWorkspace", Bss.BlocklyStorageKey, Bss.StartingWorkspace);
+			}
 		}
 
 		ChecklistState.SetSelectedStepIndex(gateway.LevelId, gateway.CurrentPartIndex);
@@ -206,7 +246,7 @@
 		if (gateway.CurrentPartIndex == 1)
 		{
 			gateway.SetPartStatusWithoutDowngrade(ChecklistState, 0, ChecklistStepStatus.Complete);
-			gateway.SetPartStatusWithoutDowngrade(ChecklistState, 1, ChecklistStepStatus.Started);
+			gateway.SetPartStatusWithoutDowngrade(ChecklistState, 1, lc.Section >= 3 ? ChecklistStepStatus.Complete : ChecklistStepStatus.Started);
 			gateway.SetPartStatusWithoutDowngrade(ChecklistState, 2, ChecklistStepStatus.Incomplete);
 			ChecklistState.SetSelectedStepIndex(gateway.LevelId, 1);
 			return;
