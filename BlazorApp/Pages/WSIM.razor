@@ -323,6 +323,8 @@
     uint finalAddress = 50;
 
     public string[]? codeStatements;
+    private int blocklyInstructionStartPc;
+    private int blocklyInstructionCount;
     IR ir = new IR();
     bool instructionsLoaded = false;
     public bool running = false;
@@ -409,11 +411,8 @@
         byte[] codeBytes;
         string combinedCode;
         string codeWithEQUs = args.code + "\n" + EQUString;
-
-        @* Get executable lines only for displaying in the Visualiser component *@
-        string codeRegex = @"([a-zA-Z0-9]+:|.text|.global main|.data|.bss)\n?";
-        string filteredCode = Regex.Replace(args.code, codeRegex, String.Empty);
-        codeStatements = filteredCode.Split("\n");
+        blocklyInstructionStartPc = 0;
+        blocklyInstructionCount = GetExecutableInstructionLines(args.code).Count;
 
         if (Library != null)
         {
@@ -436,13 +435,20 @@
                 }
 
                 string content = entry.Length > 1 ? entry[1] : string.Empty;
-                combinedParts.Add(Regex.Replace(content, htmlTags, String.Empty));
+                string cleanedContent = Regex.Replace(content, htmlTags, String.Empty);
+                if (!insertedBlocklyCode)
+                {
+                    blocklyInstructionStartPc += GetExecutableInstructionLines(cleanedContent).Count;
+                }
+
+                combinedParts.Add(cleanedContent);
             }
 
             // Preserve previous default behavior when no explicit $Blockly tag is provided.
             if (!insertedBlocklyCode)
             {
                 combinedParts.Insert(0, codeWithEQUs);
+                blocklyInstructionStartPc = 0;
             }
 
             combinedCode = string.Join("\n", combinedParts);
@@ -473,6 +479,8 @@
             combinedCode = codeWithEQUs;
         }
 
+        codeStatements = GetExecutableInstructionLines(combinedCode).ToArray();
+
         // Show the exact merged source that will be validated and assembled.
         await JSRuntime.InvokeVoidAsync("setWsimCode", combinedCode);
 
@@ -499,8 +507,13 @@
                 instructionsLoaded = true;
                 firstCompilation = true;
                 codeCompiled = true;
-                if (UIComponents.Blockly) await JSRuntime.InvokeVoidAsync("highlightBlock", blockIDs[0]);
-                ir.Instruction = board.RAM.mMemory[0];
+                if (UIComponents.Blockly)
+                {
+                    int? currentBlockIndex = GetBlocklyBlockIndexForPc(board.CPU.PC);
+                    await JSRuntime.InvokeVoidAsync("highlightBlock", currentBlockIndex.HasValue ? blockIDs[currentBlockIndex.Value] : null);
+                }
+
+                ir.Instruction = board.RAM.mMemory[board.CPU.PC];
             }
             StateHasChanged();
         }
@@ -624,14 +637,8 @@
                         //Highlight next block to be executed (try catch used to account for library code which is un-highlightable)
                         if (UIComponents.Blockly)
                         {
-                            try
-                            {
-                                await JSRuntime.InvokeVoidAsync("highlightBlock", blockIDs[board.CPU.PC]);
-                            }
-                            catch
-                            {
-                                await JSRuntime.InvokeVoidAsync("highlightBlock", null);
-                            }
+                            int? currentBlockIndex = GetBlocklyBlockIndexForPc(board.CPU.PC);
+                            await JSRuntime.InvokeVoidAsync("highlightBlock", currentBlockIndex.HasValue ? blockIDs[currentBlockIndex.Value] : null);
                         }
 
                         //Update SSDs & LEDs
@@ -870,11 +877,8 @@
             //Highlight previous block (try catch used to account for library code which is un-highlightable due to not being in the Blockly workspace)
             if (UIComponents.Blockly)
             {
-                try
-                {
-                    JSRuntime.InvokeVoidAsync("highlightBlock", blockIDs[board.CPU.PC]);
-                }
-                catch {}
+                int? currentBlockIndex = GetBlocklyBlockIndexForPc(board.CPU.PC);
+                JSRuntime.InvokeVoidAsync("highlightBlock", currentBlockIndex.HasValue ? blockIDs[currentBlockIndex.Value] : null);
             }
 
             //Remove restored states from list or decrement number of repeats
@@ -1030,6 +1034,90 @@
             JSRuntime.InvokeVoidAsync("changeSwitch", ID, value);
             switchValues >>= 1;
         }
+    }
+
+    private static List<string> GetExecutableInstructionLines(string source)
+    {
+        List<string> executableLines = new List<string>();
+        string[] lines = source.Replace("\r", string.Empty).Split('\n');
+
+        // Treat code as text by default so Blockly snippets without explicit .text are still parsed.
+        bool inTextSegment = true;
+
+        foreach (string rawLine in lines)
+        {
+            string line = rawLine;
+            int commentIndex = line.IndexOf('#');
+            if (commentIndex >= 0)
+            {
+                line = line[..commentIndex];
+            }
+
+            string trimmed = line.Trim();
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                continue;
+            }
+
+            if (trimmed.StartsWith(".", StringComparison.Ordinal))
+            {
+                if (Regex.IsMatch(trimmed, @"^\.text\b", RegexOptions.IgnoreCase))
+                {
+                    inTextSegment = true;
+                }
+                else if (Regex.IsMatch(trimmed, @"^\.(data|bss)\b", RegexOptions.IgnoreCase))
+                {
+                    inTextSegment = false;
+                }
+
+                continue;
+            }
+
+            if (!inTextSegment)
+            {
+                continue;
+            }
+
+            int colonIndex = trimmed.IndexOf(':');
+            if (colonIndex >= 0)
+            {
+                trimmed = trimmed[(colonIndex + 1)..].Trim();
+                if (string.IsNullOrWhiteSpace(trimmed))
+                {
+                    continue;
+                }
+            }
+
+            executableLines.Add(trimmed);
+        }
+
+        return executableLines;
+    }
+
+    private int? GetBlocklyBlockIndexForPc(uint programCounter)
+    {
+        if (blockIDs == null || blockIDs.Length == 0)
+        {
+            return null;
+        }
+
+        int relativePc = (int)programCounter - blocklyInstructionStartPc;
+        if (relativePc < 0)
+        {
+            return null;
+        }
+
+        if (relativePc >= blocklyInstructionCount)
+        {
+            return null;
+        }
+
+        if (relativePc >= blockIDs.Length)
+        {
+            return null;
+        }
+
+        return relativePc;
     }
 
     void quack()
