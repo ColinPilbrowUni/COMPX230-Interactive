@@ -63,7 +63,7 @@
                             <tr><th>The current instruction cannot be visualised</th></tr>
                         </thead>
                         <tbody class="table-group-divider text-center">
-                            <tr><td>When an arithmetic or shifting instruction is about to execute, this component will display the instruction, the registers involved and their contents, and the result of the operation in the destination register!</td></tr>
+                            <tr><td>When an arithmetic or bitwise instruction is about to execute, this component will display the instruction, the registers involved and their contents, and the result of the operation in the destination register!</td></tr>
                         </tbody>
                     }
                 </table>
@@ -83,7 +83,7 @@
     required public RexBoard Board { get; set; }
 
     public string shiftRegex = @"sl(li||l)|sr(l|li|a|ai)";
-    public string arithmeticRegex = @"(add|sub|mult|div|rem)u?i?|lhi";
+    public string arithmeticRegex = @"(add|sub|mult|div|rem)u?i?|(and|or|xor)i?|lhi";
 
     private bool needVisualiseUpdate = false;
 
@@ -135,6 +135,9 @@
                 IR.Function.divu => rightRaw == 0 ? 0u : unchecked(left / rightRaw),
                 IR.Function.rem => signedRight == 0 ? 0u : unchecked((uint)(signedLeft % signedRight)),
                 IR.Function.remu => rightRaw == 0 ? 0u : unchecked(left % rightRaw),
+                IR.Function.and => left & rightRaw,
+                IR.Function.or => left | rightRaw,
+                IR.Function.xor => left ^ rightRaw,
                 IR.Function.lhi => rightRaw << 16,
                 _ => throw new InvalidOperationException($"Unsupported arithmetic function: {ir.Func}")
             };
@@ -156,6 +159,9 @@
             IR.Function.divu => right == 0 ? 0u : unchecked(left / right),
             IR.Function.rem => signedRightRegister == 0 ? 0u : unchecked((uint)(signedLeftRegister % signedRightRegister)),
             IR.Function.remu => right == 0 ? 0u : unchecked(left % right),
+            IR.Function.and => left & right,
+            IR.Function.or => left | right,
+            IR.Function.xor => left ^ right,
             IR.Function.lhi => right << 16,
             _ => throw new InvalidOperationException($"Unsupported arithmetic function: {ir.Func}")
         };

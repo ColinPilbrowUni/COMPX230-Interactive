@@ -470,6 +470,15 @@ window.updateSign = (instruction) =>
         case instruction.includes('rem'):
             sign.innerText = '%';
             break;
+        case instruction.includes('and'):
+            sign.innerText = '&';
+            break;
+        case instruction.includes('xor'):
+            sign.innerText = '^';
+            break;
+        case instruction.includes('or'):
+            sign.innerText = '|';
+            break;
         case instruction.includes('sr'):
             sign.innerText = '>>';
             break;
