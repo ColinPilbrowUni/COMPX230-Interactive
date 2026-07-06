@@ -113,6 +113,21 @@
         return "0b" + Convert.ToString(value, 2).PadLeft(16, '0');
     }
 
+    private static string GetInstructionSign(string instruction)
+    {
+        if (instruction.Contains("add", StringComparison.Ordinal)) return "+";
+        if (instruction.Contains("sub", StringComparison.Ordinal)) return "-";
+        if (instruction.Contains("mult", StringComparison.Ordinal)) return "*";
+        if (instruction.Contains("div", StringComparison.Ordinal)) return "÷";
+        if (instruction.Contains("rem", StringComparison.Ordinal)) return "%";
+        if (instruction.Contains("and", StringComparison.Ordinal)) return "&";
+        if (instruction.Contains("xor", StringComparison.Ordinal)) return "^";
+        if (instruction.Contains("or", StringComparison.Ordinal)) return "|";
+        if (instruction.Contains("sr", StringComparison.Ordinal)) return ">>";
+        if (instruction.Contains("sl", StringComparison.Ordinal)) return "<<";
+        return string.Empty;
+    }
+
     private uint GetArithmeticResult()
     {
         uint left = Board.CPU.mGpRegisters[ir.Rs];
@@ -200,7 +215,8 @@
         }
 
         @* Sign *@
-        await JSRuntime.InvokeVoidAsync("updateSign", ir.ToString());
+        string instruction = ir.ToString();
+        await JSRuntime.InvokeVoidAsync("updateVisualiser", "visualiseSign", GetInstructionSign(instruction));
 
         @* Rs *@
         await JSRuntime.InvokeVoidAsync("updateVisualiser", "visualiseSource", FormatBinary32(Board.CPU.mGpRegisters[ir.Rs]));
@@ -208,7 +224,7 @@
         @* i / Rt *@
         if (ir.OpCode == IR.Opcode.arith_i)
         {
-            await JSRuntime.InvokeVoidAsync("updateVisualiser", "visualiseImmed", Regex.IsMatch(ir.ToString(), arithmeticRegex) ? FormatBinary16(ir.Immed16) : ir.Immed16);
+            await JSRuntime.InvokeVoidAsync("updateVisualiser", "visualiseImmed", Regex.IsMatch(instruction, arithmeticRegex) ? FormatBinary16(ir.Immed16) : ir.Immed16);
         }
         else
         {
