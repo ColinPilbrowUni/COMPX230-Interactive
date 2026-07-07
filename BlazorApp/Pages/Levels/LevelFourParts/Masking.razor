@@ -51,6 +51,11 @@
     }
 </section>
 
+@if (Section < 4)
+{
+    <button class="btn btn-danger skip-level-button" type="button" @onclick="SkipLevelAsync">Skip Level</button>
+}
+
 @code {
     public static readonly LevelGroupPart GroupPart = new("masking", "Masking", ProgressScopeId);
 
@@ -251,6 +256,33 @@
         }
     }
 
+    private async Task SkipLevelAsync()
+    {
+        bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to skip this level?");
+        if (!confirmed)
+        {
+            return;
+        }
+
+        Section = 4;
+        blocklyStepOneComplete = true;
+        blocklyStepTwoComplete = true;
+
+        await JSRuntime.InvokeVoidAsync("objectiveCheck", "inputMaskOneCheckmark");
+        await JSRuntime.InvokeVoidAsync("objectiveCheck", "inputMaskTwoCheckmark");
+
+        await ProgressChanged.InvokeAsync((Section, blocklyStepOneComplete, blocklyStepTwoComplete, true));
+    }
+
     [Inject]
     private IJSRuntime JSRuntime { get; set; } = null!;
 }
+
+<style>
+.skip-level-button {
+    position: fixed;
+    right: 1.25rem;
+    bottom: 1.25rem;
+    z-index: 1050;
+}
+</style>
