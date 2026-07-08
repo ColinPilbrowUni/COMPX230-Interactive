@@ -9,18 +9,138 @@
 	public const string ProgressScopeId = "levelFiveBss";
 	public const string BlocklyStorageKey = "levelFiveBssBlockly";
 
-	public static UIComponents Components { get; } = new();
+	public static UIComponents Components { get; } = new(
+        Blockly: true,
+        Code: true,
+        GPRegisters: true,
+        ParallelRegisters: true,
+        SerialPort: true,
+		RAM: true,
+        Visualiser: true);
 
 	public static Toolbox Toolbox { get; } = new()
 	{
-		contents = new List<Category>()
+		contents = new List<Category>() {
+            new Category {
+                name = "Sections",
+                categorystyle = "sectionCategory",
+                contents = new List<Block>() {
+                    new Block { type = "textHead" },
+                    new Block { type = "global" },
+                    new Block { type = "dataHead" },
+                    new Block { type = "bssHead" }
+                }
+            },
+            new Category {
+                name = "Branch",
+                categorystyle = "branchCategory",
+                contents = new List<Block>() {
+                    new Block { type = "label" },
+                    new Block { type = "jump" },
+                    new Block { type = "jumpRegister" },
+                    new Block { type = "branchOn" }
+                }
+            },
+            new Category {
+                name = "Memory",
+                categorystyle = "memoryCategory",
+                contents = new List<Block>() {
+                    new Block { type = "loadWord" },
+                    new Block { type = "storeWord" },
+                    new Block { type = "loadAddress" },
+                    new Block { type = "word" },
+                    new Block { type = "asciiz" },
+                    new Block { type = "ascii" },
+                    new Block { type = "space" },
+                    new Block { type = "equ" }
+                }
+            },
+            new Category {
+                name = "Arithmetic",
+                categorystyle = "arithmeticCategory",
+                contents = new List<Block>() {
+                    new Block { type = "arithmetic" },
+                    new Block { type = "arithmeticUnsigned" },
+                    new Block { type = "arithmeticImmediate" },
+                    new Block { type = "arithmeticUnsignedImmediate" },
+                    new Block { type = "loadHighImmediate" },
+                }
+            },
+            new Category {
+                name = "Logic",
+                categorystyle = "logicCategory",
+                contents = new List<Block>() {
+                    new Block { type = "bitwise" },
+                    new Block { type = "bitwiseImmediate" },
+                    new Block { type = "shift" },
+                    new Block { type = "shiftImmediate" },
+                }
+            },
+            new Category {
+                name = "Conditional",
+                categorystyle = "conditionalCategory",
+                contents = new List<Block>() {
+                    new Block { type = "setOn" },
+                    new Block { type = "setOnUnsigned" },
+                    new Block { type = "setOnImmediate" },
+                    new Block { type = "setOnUnsignedImmediate" },
+                }
+            },
+            new Category {
+                name = "Special",
+                categorystyle = "specialCategory",
+                contents = new List<Block>() {
+                    new Block { type = "moveGeneralToSpecial" },
+                    new Block { type = "moveSpecialToGeneral" },
+                    new Block { type = "break" },
+                    new Block { type = "syscall" },
+                    new Block { type = "returnFromException" },
+                }
+            }
+        }
 	};
 
-	public static string StartingWorkspace { get; } = "";
+	public static string StartingWorkspace { get; } = """ 
+    {"blocks":{"languageVersion":0,"blocks":[{"type":"label","id":"%oa;ajo!Mf:@B!Lu/~CB","x":103,"y":57,"fields":{"label":"check"},"next":{"block":{"type":"loadWord","id":"lJH:R%ak6%u#-StLmLe%","fields":{"instruction":"lw","register1":"$11","offset":"0x70003","register2":"$0"},"next":{"block":{"type":"bitwiseImmediate","id":"6W;IAy[l.9g^Q26m.e0f","fields":{"instruction":"andi","register1":"$11","register2":"$11","immediate":"0x2"},"next":{"block":{"type":"branchOn","id":"2Z*eRAf6#4-cc?S1w?-s","fields":{"instruction":"beqz","register":"$11","offset":"check"},"next":{"block":{"type":"storeWord","id":"?Teo.])C{H;jzjrF5Ucg","fields":{"instruction":"sw","register1":"$9","offset":"0x70000","register2":"$0"},"next":{"block":{"type":"arithmeticImmediate","id":"M~/FDo=K|C@VewL.DY_C","fields":{"instruction":"addi","register1":"$2","register2":"$2","immediate":"1"},"next":{"block":{"type":"jump","id":"!vmM-MyEbA6(%bj2f7e(","fields":{"instruction":"j","address":"loop"},"next":{"block":{"type":"label","id":"u.n;?e2p,e9BN1T!%{R!","fields":{"label":"done"},"next":{"block":{"type":"jumpRegister","id":"v0%8S:r~zOwCr!9T#tX9","fields":{"instruction":"jr","register":"$ra"}}}}}}}}}}}}}}}}}}]}}
+    """;
 
-	public static string? MaxInstances => null;
+	public static string? MaxInstances { get; } = "{ 'textHead': 1}";
 
-	public static string[][]? Library => null;
+	public static string[][]? Library { get; } =
+    {
+        new string[] { "message.s", """
+    .text
+    .global main
+    main:
+        addi $2, $0, 0   # initialize $2 to value of 0, to be used as an offset into the message
+        loop:
+        lw $9, message($2) # load the next character in the message from .data into $9
+        beqz $9, done # if the character is 0 (end of string), jump to "done"
+    """ },
+        new string[] { "$Blockly", "" },
+        new string[] { "data.s", """
+    .data
+    message:
+        .word 115
+        .word 110
+        .word 97
+        .word 109
+        .word 117
+        .word 72
+        .word 32
+        .word 44
+        .word 115
+        .word 103
+        .word 110
+        .word 105
+        .word 116
+        .word 101
+        .word 101
+        .word 114
+        .word 71
+        .word 0
+    """ }
+    };
 
 	[Parameter]
 	public int Section { get; set; }

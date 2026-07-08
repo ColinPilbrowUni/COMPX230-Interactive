@@ -1,4 +1,5 @@
 @using RexSimulator.Hardware
+@using System.Globalization
 @using System.Text
 @using System.Text.RegularExpressions
 @using System.Linq
@@ -417,8 +418,6 @@
         if (Library != null)
         {
             string htmlTags = @"<table>|</table>|<tr>|</tr>|<td>|</td>\n";
-            string nonCodeTags = @".text|.data|.bss|.global main";
-            string labelPattern = @"^[a-zA-Z_][a-zA-Z0-9_.]*:";
 
             bool insertedBlocklyCode = false;
             List<string> combinedParts = new List<string>();
@@ -452,32 +451,13 @@
             }
 
             combinedCode = string.Join("\n", combinedParts);
-
-            //Get the labels from the library code
-            string libraryCode = Regex.Replace(CombinedNonBlocklyLibraryCode, htmlTags, String.Empty);
-            List<string> libraryLines = libraryCode.Split('\n').ToList();
-            List<string> labelLines = new List<string>();
-            for (int i = 0; i < libraryLines.Count - 1; i++)
-            {
-                if (!Regex.IsMatch(libraryLines[i], nonCodeTags) && libraryLines[i] != String.Empty)
-                {
-                    if (!Regex.IsMatch(libraryLines[i], labelPattern))
-                    {
-                        labelLines.Add(String.Empty);
-                    }
-                    else
-                    {
-                        if (labelLines.Count > 1) labelLines.RemoveAt(labelLines.Count - 1);
-                        labelLines.Add(libraryLines[i].Substring(0, libraryLines[i].IndexOf(':')));
-                    }
-                }
-            }
-            labels.AddRange(labelLines);
         }
         else
         {
             combinedCode = codeWithEQUs;
         }
+
+        labels = BuildMemoryLabels(combinedCode);
 
         codeStatements = GetExecutableInstructionLines(combinedCode).ToArray();
 
@@ -1092,6 +1072,170 @@
         }
 
         return executableLines;
+    }
+
+    private enum Segment
+    {
+        Text,
+        Data,
+        Bss
+    }
+
+    private static List<string> BuildMemoryLabels(string source)
+    {
+        Dictionary<Segment, List<string>> labelsBySegment = new Dictionary<Segment, List<string>>
+        {
+            [Segment.Text] = new List<string>(),
+            [Segment.Data] = new List<string>(),
+            [Segment.Bss] = new List<string>()
+        };
+
+        Segment currentSegment = Segment.Text;
+        string? pendingLabel = null;
+
+        string[] lines = source.Replace("\r", string.Empty).Split('\n');
+        foreach (string rawLine in lines)
+        {
+            string line = rawLine;
+            int commentIndex = line.IndexOf('#');
+            if (commentIndex >= 0)
+            {
+                line = line[..commentIndex];
+            }
+
+            string trimmed = line.Trim();
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                continue;
+            }
+
+            if (Regex.IsMatch(trimmed, @"^\.text\b", RegexOptions.IgnoreCase))
+            {
+                currentSegment = Segment.Text;
+                continue;
+            }
+
+            if (Regex.IsMatch(trimmed, @"^\.data\b", RegexOptions.IgnoreCase))
+            {
+                currentSegment = Segment.Data;
+                continue;
+            }
+
+            if (Regex.IsMatch(trimmed, @"^\.bss\b", RegexOptions.IgnoreCase))
+            {
+                currentSegment = Segment.Bss;
+                continue;
+            }
+
+            Match labelMatch = Regex.Match(trimmed, @"^([a-zA-Z_][a-zA-Z0-9_.]*):\s*(.*)$");
+            if (labelMatch.Success)
+            {
+                string label = labelMatch.Groups[1].Value;
+                string remainder = labelMatch.Groups[2].Value.Trim();
+
+                if (string.IsNullOrWhiteSpace(remainder))
+                {
+                    pendingLabel = label;
+                    continue;
+                }
+
+                pendingLabel = label;
+                trimmed = remainder;
+            }
+
+            int wordsProduced = GetWordsProducedForLine(trimmed, currentSegment);
+            if (wordsProduced <= 0)
+            {
+                continue;
+            }
+
+            List<string> segmentLabels = labelsBySegment[currentSegment];
+            for (int i = 0; i < wordsProduced; i++)
+            {
+                if (i == 0 && pendingLabel != null)
+                {
+                    segmentLabels.Add(pendingLabel);
+                    pendingLabel = null;
+                }
+                else
+                {
+                    segmentLabels.Add(string.Empty);
+                }
+            }
+        }
+
+        return labelsBySegment[Segment.Text]
+            .Concat(labelsBySegment[Segment.Data])
+            .Concat(labelsBySegment[Segment.Bss])
+            .ToList();
+    }
+
+    private static int GetWordsProducedForLine(string trimmedLine, Segment segment)
+    {
+        if (string.IsNullOrWhiteSpace(trimmedLine))
+        {
+            return 0;
+        }
+
+        if (trimmedLine.StartsWith(".global", StringComparison.OrdinalIgnoreCase)
+            || trimmedLine.StartsWith(".equ", StringComparison.OrdinalIgnoreCase))
+        {
+            return 0;
+        }
+
+        if (segment == Segment.Text)
+        {
+            return trimmedLine.StartsWith(".", StringComparison.Ordinal) ? 0 : 1;
+        }
+
+        if (Regex.IsMatch(trimmedLine, @"^\.word\b", RegexOptions.IgnoreCase))
+        {
+            string operands = Regex.Replace(trimmedLine, @"^\.word\s+", string.Empty, RegexOptions.IgnoreCase);
+            return operands.Split(',', StringSplitOptions.RemoveEmptyEntries).Length;
+        }
+
+        if (Regex.IsMatch(trimmedLine, @"^\.space\b", RegexOptions.IgnoreCase))
+        {
+            Match valueMatch = Regex.Match(trimmedLine, @"^\.space\s+([^\s,]+)", RegexOptions.IgnoreCase);
+            if (!valueMatch.Success)
+            {
+                return 0;
+            }
+
+            if (TryParseAssemblyNumber(valueMatch.Groups[1].Value, out int spaceWords))
+            {
+                return Math.Max(spaceWords, 0);
+            }
+
+            return 0;
+        }
+
+        Match asciizMatch = Regex.Match(trimmedLine, @"^\.asciiz\s+""(.*)""$", RegexOptions.IgnoreCase);
+        if (asciizMatch.Success)
+        {
+            return asciizMatch.Groups[1].Value.Length + 1;
+        }
+
+        Match asciiMatch = Regex.Match(trimmedLine, @"^\.ascii\s+""(.*)""$", RegexOptions.IgnoreCase);
+        if (asciiMatch.Success)
+        {
+            return asciiMatch.Groups[1].Value.Length;
+        }
+
+        return trimmedLine.StartsWith(".", StringComparison.Ordinal) ? 0 : 1;
+    }
+
+    private static bool TryParseAssemblyNumber(string token, out int value)
+    {
+        value = 0;
+        string cleaned = token.Trim();
+
+        if (cleaned.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        {
+            return int.TryParse(cleaned[2..], NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out value);
+        }
+
+        return int.TryParse(cleaned, NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
     }
 
     private int? GetBlocklyBlockIndexForPc(uint programCounter)

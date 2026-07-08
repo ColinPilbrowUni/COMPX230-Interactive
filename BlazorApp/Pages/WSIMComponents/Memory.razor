@@ -43,7 +43,8 @@
 {
     //Print instructions with a small buffer of null addresses at the end
     List<MemoryPos> mPos = new List<MemoryPos>();
-    @for (uint i = mDevice.BaseAddress; i < ((labels != null && labels.Count != 0 ? labels.Count : wordsLoaded) + mDevice.BaseAddress); i++)
+    uint displayWordCount = Math.Max(wordsLoaded, (uint)(labels?.Count ?? 0));
+    @for (uint i = mDevice.BaseAddress; i < (displayWordCount + mDevice.BaseAddress); i++)
     {
         if (mDevice.Name == "Memory (RAM)")
         {
