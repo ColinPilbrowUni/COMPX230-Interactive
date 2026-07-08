@@ -7,20 +7,39 @@
     <h2>.bss</h2>
     <h3>Using Uninitialized Memory</h3>
 
+    <h4>Question One</h4>
+    <p>What WRAMP directive allocates 7 rows of uninitialized memory under <code>.bss</code>?</p>
+    <input id="inputBssQuestionOne" @oninput="OnInputBssQuestionOneChanged" placeholder="Type your answer here" />
+    <label class="inputCheckmark" id="inputBssQuestionOneCheckmark" for="inputBssQuestionOne"><i class="bi bi-check-lg"></i></label>
+
+    @if (Section >= 1)
+    {
+        <h4>Question Two</h4>
+        <p>True or false? Labelled blocks of uninitialized memory in <code>.bss</code> are separated by an <b>additional</b> row in memory with value <code>0</code>.</p>
+        <select id="inputBssQuestionTwo" @onchange="OnInputBssQuestionTwoChanged">
+            <option value="">Select an answer</option>
+            <option value="True">True</option>
+            <option value="False">False</option>
+        </select>
+        <label class="inputCheckmark" id="inputBssQuestionTwoCheckmark" for="inputBssQuestionTwo"><i class="bi bi-check-lg"></i></label>
+    }
+
+	<h4 class="mt-3" hidden="@(Section < 2)">Reversed Message</h4>
+
     <ul>
-        <li hidden="@(Section < 0)">The current message in <code>.data</code> is reversed.</li>
-        <li hidden="@(Section < 0)">Create a <code>.bss</code> section with a label and reserve space using <code>.space 17</code>.</li>
-        <li hidden="@(Section < 0)">The 17 words include every character plus the <code>0</code> delimiter.</li>
-        <label class="inputCheckmark" id="bssStepOneCheckmark" hidden="@(Section < 0)"><i class="bi bi-check-lg"></i></label>
+        <li hidden="@(Section < 2)">The current message in <code>.data</code> is reversed.</li>
+        <li hidden="@(Section < 2)">Create a <code>.bss</code> section with a label and reserve space using <code>.space 17</code>.</li>
+        <li hidden="@(Section < 2)">The 17 words include every character plus the <code>0</code> delimiter.</li>
+        <label class="inputCheckmark" id="bssStepOneCheckmark" hidden="@(Section < 2)"><i class="bi bi-check-lg"></i></label>
 
-        <li hidden="@(Section < 1)">Now copy the message into your <code>.bss</code> buffer in the correct order.</li>
-        <li hidden="@(Section < 1)">Step 2 completes when memory under your chosen <code>.bss</code> label contains the full ordered message and delimiter.</li>
-        <label class="inputCheckmark" id="bssStepTwoCheckmark" hidden="@(Section < 1)"><i class="bi bi-check-lg"></i></label>
+        <li hidden="@(Section < 3)">Now copy the message into your <code>.bss</code> buffer in the correct order.</li>
+        <li hidden="@(Section < 3)">Step 2 completes when memory under your chosen <code>.bss</code> label contains the full ordered message and delimiter.</li>
+        <label class="inputCheckmark" id="bssStepTwoCheckmark" hidden="@(Section < 3)"><i class="bi bi-check-lg"></i></label>
 
-        <li hidden="@(Section < 2)">Bonus task: write the correctly ordered message to the serial port.</li>
-        <label class="inputCheckmark" id="bssStepThreeCheckmark" hidden="@(Section < 2)"><i class="bi bi-check-lg"></i></label>
+        <li hidden="@(Section < 4)">Bonus task: write the correctly ordered message to the serial port.</li>
+        <label class="inputCheckmark" id="bssStepThreeCheckmark" hidden="@(Section < 4)"><i class="bi bi-check-lg"></i></label>
 
-        <li hidden="@(Section < 3)">Bonus complete. Serial output now shows the ordered message.</li>
+        <li hidden="@(Section < 5)">Bonus complete. Serial output now shows the ordered message.</li>
     </ul>
 </section>
 
@@ -183,15 +202,25 @@
 	{
         if (Section >= 1)
         {
-            _ = JSRuntime.InvokeVoidAsync("objectiveCheck", "bssStepOneCheckmark");
+            _ = JSRuntime.InvokeVoidAsync("objectiveCheck", "inputBssQuestionOneCheckmark");
         }
 
         if (Section >= 2)
         {
-            _ = JSRuntime.InvokeVoidAsync("objectiveCheck", "bssStepTwoCheckmark");
+            _ = JSRuntime.InvokeVoidAsync("objectiveCheck", "inputBssQuestionTwoCheckmark");
         }
 
         if (Section >= 3)
+        {
+            _ = JSRuntime.InvokeVoidAsync("objectiveCheck", "bssStepOneCheckmark");
+        }
+
+        if (Section >= 4)
+        {
+            _ = JSRuntime.InvokeVoidAsync("objectiveCheck", "bssStepTwoCheckmark");
+        }
+
+        if (Section >= 5)
         {
             _ = JSRuntime.InvokeVoidAsync("objectiveCheck", "bssStepThreeCheckmark");
         }
@@ -208,45 +237,84 @@
         string analyzableSource = BuildAnalyzableSource(userCode);
         List<BssSpaceDeclaration> bssDeclarations = ParseBssSpaceDeclarations(analyzableSource);
 
-        bool stepOneComplete = bssDeclarations.Any(d => d.SpaceLength == RequiredBssSpaceLength);
-        bool stepTwoComplete = false;
+        bool stepOneComplete = Section >= 3;
+        bool stepTwoComplete = Section >= 4;
         bool stepThreeComplete = false;
         bool triggerLevelCompleted = false;
 
-        if (stepOneComplete)
+        if (Section >= 2)
         {
-            await JSRuntime.InvokeVoidAsync("objectiveCheck", "bssStepOneCheckmark");
-            if (Section < 1)
+            bool stepOneCompleteNow = bssDeclarations.Any(d => d.SpaceLength == RequiredBssSpaceLength);
+            if (stepOneCompleteNow)
             {
-                Section = 1;
-            }
-
-            stepTwoComplete = HasOrderedMessageInDeclaredBssBuffer(Board, analyzableSource, bssDeclarations);
-            if (stepTwoComplete)
-            {
-                await JSRuntime.InvokeVoidAsync("objectiveCheck", "bssStepTwoCheckmark");
-                if (Section < 2)
+                stepOneComplete = true;
+                await JSRuntime.InvokeVoidAsync("objectiveCheck", "bssStepOneCheckmark");
+                if (Section < 3)
                 {
-                    Section = 2;
-                    triggerLevelCompleted = true;
+                    Section = 3;
+                }
+
+                bool stepTwoCompleteNow = HasOrderedMessageInDeclaredBssBuffer(Board, analyzableSource, bssDeclarations);
+                if (stepTwoCompleteNow)
+                {
+                    stepTwoComplete = true;
+                    await JSRuntime.InvokeVoidAsync("objectiveCheck", "bssStepTwoCheckmark");
+                    if (Section < 4)
+                    {
+                        Section = 4;
+                        triggerLevelCompleted = true;
+                    }
                 }
             }
         }
 
-        if (Section >= 2)
+        if (Section >= 4)
         {
             stepThreeComplete = string.Equals(Board.Serial1.serialText, ExpectedOrderedMessageText, StringComparison.Ordinal);
             if (stepThreeComplete)
             {
                 await JSRuntime.InvokeVoidAsync("objectiveCheck", "bssStepThreeCheckmark");
-                if (Section < 3)
+                if (Section < 5)
                 {
-                    Section = 3;
+                    Section = 5;
                 }
             }
         }
 
         await ProgressChanged.InvokeAsync((Section, stepTwoComplete, triggerLevelCompleted));
+    }
+
+    private async Task OnInputBssQuestionOneChanged(ChangeEventArgs e)
+    {
+        string userInput = e.Value?.ToString() ?? string.Empty;
+        string normalizedInput = Regex.Replace(userInput.Trim().ToLowerInvariant(), @"\s+", " ");
+
+        if (normalizedInput == ".space 7")
+        {
+            if (Section < 1)
+            {
+                Section = 1;
+            }
+
+            await JSRuntime.InvokeVoidAsync("objectiveCheck", "inputBssQuestionOneCheckmark");
+            await ProgressChanged.InvokeAsync((Section, Section >= 4, false));
+        }
+    }
+
+    private async Task OnInputBssQuestionTwoChanged(ChangeEventArgs e)
+    {
+        string selectedValue = e.Value?.ToString() ?? string.Empty;
+
+        if (string.Equals(selectedValue, "False", StringComparison.OrdinalIgnoreCase))
+        {
+            if (Section < 2)
+            {
+                Section = 2;
+            }
+
+            await JSRuntime.InvokeVoidAsync("objectiveCheck", "inputBssQuestionTwoCheckmark");
+            await ProgressChanged.InvokeAsync((Section, Section >= 4, false));
+        }
     }
 
     private static List<BssSpaceDeclaration> ParseBssSpaceDeclarations(string source)
