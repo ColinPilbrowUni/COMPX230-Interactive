@@ -1,6 +1,27 @@
+@using System.Globalization
+@using System.Text.RegularExpressions
+@using RexSimulator.Hardware
+@inject IJSRuntime JSRuntime
+
 <section>
-	<h2>.bss</h2>
-	<p>Coming soon.</p>
+    <h2>.bss</h2>
+    <h3>Using Uninitialized Memory</h3>
+
+    <ul>
+        <li hidden="@(Section < 0)">The current message in <code>.data</code> is reversed.</li>
+        <li hidden="@(Section < 0)">Create a <code>.bss</code> section with a label and reserve space using <code>.space 17</code>.</li>
+        <li hidden="@(Section < 0)">The 17 words include every character plus the <code>0</code> delimiter.</li>
+        <label class="inputCheckmark" id="bssStepOneCheckmark" hidden="@(Section < 0)"><i class="bi bi-check-lg"></i></label>
+
+        <li hidden="@(Section < 1)">Now copy the message into your <code>.bss</code> buffer in the correct order.</li>
+        <li hidden="@(Section < 1)">Step 2 completes when memory under your chosen <code>.bss</code> label contains the full ordered message and delimiter.</li>
+        <label class="inputCheckmark" id="bssStepTwoCheckmark" hidden="@(Section < 1)"><i class="bi bi-check-lg"></i></label>
+
+        <li hidden="@(Section < 2)">Bonus task: write the correctly ordered message to the serial port.</li>
+        <label class="inputCheckmark" id="bssStepThreeCheckmark" hidden="@(Section < 2)"><i class="bi bi-check-lg"></i></label>
+
+        <li hidden="@(Section < 3)">Bonus complete. Serial output now shows the ordered message.</li>
+    </ul>
 </section>
 
 @code {
@@ -101,7 +122,7 @@
 	};
 
 	public static string StartingWorkspace { get; } = """ 
-    {"blocks":{"languageVersion":0,"blocks":[{"type":"label","id":"%oa;ajo!Mf:@B!Lu/~CB","x":103,"y":57,"fields":{"label":"check"},"next":{"block":{"type":"loadWord","id":"lJH:R%ak6%u#-StLmLe%","fields":{"instruction":"lw","register1":"$11","offset":"0x70003","register2":"$0"},"next":{"block":{"type":"bitwiseImmediate","id":"6W;IAy[l.9g^Q26m.e0f","fields":{"instruction":"andi","register1":"$11","register2":"$11","immediate":"0x2"},"next":{"block":{"type":"branchOn","id":"2Z*eRAf6#4-cc?S1w?-s","fields":{"instruction":"beqz","register":"$11","offset":"check"},"next":{"block":{"type":"storeWord","id":"?Teo.])C{H;jzjrF5Ucg","fields":{"instruction":"sw","register1":"$9","offset":"0x70000","register2":"$0"},"next":{"block":{"type":"arithmeticImmediate","id":"M~/FDo=K|C@VewL.DY_C","fields":{"instruction":"addi","register1":"$2","register2":"$2","immediate":"1"},"next":{"block":{"type":"jump","id":"!vmM-MyEbA6(%bj2f7e(","fields":{"instruction":"j","address":"loop"},"next":{"block":{"type":"label","id":"u.n;?e2p,e9BN1T!%{R!","fields":{"label":"done"},"next":{"block":{"type":"jumpRegister","id":"v0%8S:r~zOwCr!9T#tX9","fields":{"instruction":"jr","register":"$ra"}}}}}}}}}}}}}}}}}}]}}
+    {"blocks":{"languageVersion":0,"blocks":[{"type":"label","id":"-KlPL;r.Y+iiRq(ALI/c","x":107,"y":89,"fields":{"label":"loop"},"next":{"block":{"type":"loadWord","id":"jV]!wXmpN=RbBI[oJ]{m","fields":{"instruction":"lw","register1":"$9","offset":"message","register2":"$2"},"next":{"block":{"type":"branchOn","id":"PO]!N7]fIvbGI*;~+Q]T","fields":{"instruction":"beqz","register":"$9","offset":"done"}}}}}},{"type":"label","id":"%oa;ajo!Mf:@B!Lu/~CB","x":105,"y":213,"fields":{"label":"check"},"next":{"block":{"type":"loadWord","id":"lJH:R%ak6%u#-StLmLe%","fields":{"instruction":"lw","register1":"$11","offset":"0x70003","register2":"$0"},"next":{"block":{"type":"bitwiseImmediate","id":"6W;IAy[l.9g^Q26m.e0f","fields":{"instruction":"andi","register1":"$11","register2":"$11","immediate":"0x2"},"next":{"block":{"type":"branchOn","id":"2Z*eRAf6#4-cc?S1w?-s","fields":{"instruction":"beqz","register":"$11","offset":"check"},"next":{"block":{"type":"storeWord","id":"?Teo.])C{H;jzjrF5Ucg","fields":{"instruction":"sw","register1":"$9","offset":"0x70000","register2":"$0"},"next":{"block":{"type":"arithmeticImmediate","id":"M~/FDo=K|C@VewL.DY_C","fields":{"instruction":"addi","register1":"$2","register2":"$2","immediate":"1"},"next":{"block":{"type":"jump","id":"!vmM-MyEbA6(%bj2f7e(","fields":{"instruction":"j","address":"loop"},"next":{"block":{"type":"label","id":"u.n;?e2p,e9BN1T!%{R!","fields":{"label":"done"},"next":{"block":{"type":"jumpRegister","id":"v0%8S:r~zOwCr!9T#tX9","fields":{"instruction":"jr","register":"$ra"}}}}}}}}}}}}}}}}}}]}}
     """;
 
 	public static string? MaxInstances { get; } = "{ 'textHead': 1}";
@@ -113,15 +134,11 @@
     .global main
     main:
         addi $2, $0, 0   # initialize $2 to value of 0, to be used as an offset into the message
-        loop:
-        lw $9, message($2) # load the next character in the message from .data into $9
-        beqz $9, done # if the character is 0 (end of string), jump to "done"
     """ },
         new string[] { "$Blockly", "" },
         new string[] { "data.s", """
     .data
     message:
-        .word 115
         .word 110
         .word 97
         .word 109
@@ -142,14 +159,445 @@
     """ }
     };
 
+    private static readonly uint[] ExpectedOrderedMessageWords =
+    {
+        71, 114, 101, 101, 116, 105, 110, 103, 115, 44, 32, 72, 117, 109, 97, 110, 0
+    };
+
+    private const string ExpectedOrderedMessageText = "Greetings, Human";
+    private const int RequiredBssSpaceLength = 17;
+
 	[Parameter]
 	public int Section { get; set; }
+
+    [Parameter]
+    public RexBoard? Board { get; set; }
+
+    [Parameter]
+    public LevelComponents? LevelComponents { get; set; }
 
 	[Parameter]
 	public EventCallback<(int Section, bool StepComplete, bool TriggerLevelCompleted)> ProgressChanged { get; set; }
 
-	public Task HandleBoardChanged()
+    protected override void OnParametersSet()
 	{
-		return ProgressChanged.InvokeAsync((Section, false, false));
+        if (Section >= 1)
+        {
+            _ = JSRuntime.InvokeVoidAsync("objectiveCheck", "bssStepOneCheckmark");
+        }
+
+        if (Section >= 2)
+        {
+            _ = JSRuntime.InvokeVoidAsync("objectiveCheck", "bssStepTwoCheckmark");
+        }
+
+        if (Section >= 3)
+        {
+            _ = JSRuntime.InvokeVoidAsync("objectiveCheck", "bssStepThreeCheckmark");
+        }
+    }
+
+    public async Task HandleBoardChanged()
+    {
+        if (Board == null || LevelComponents == null)
+        {
+            return;
+        }
+
+        string userCode = await LevelComponents.GetUserCode();
+        string analyzableSource = BuildAnalyzableSource(userCode);
+        List<BssSpaceDeclaration> bssDeclarations = ParseBssSpaceDeclarations(analyzableSource);
+
+        bool stepOneComplete = bssDeclarations.Any(d => d.SpaceLength == RequiredBssSpaceLength);
+        bool stepTwoComplete = false;
+        bool stepThreeComplete = false;
+        bool triggerLevelCompleted = false;
+
+        if (stepOneComplete)
+        {
+            await JSRuntime.InvokeVoidAsync("objectiveCheck", "bssStepOneCheckmark");
+            if (Section < 1)
+            {
+                Section = 1;
+            }
+
+            stepTwoComplete = HasOrderedMessageInDeclaredBssBuffer(Board, analyzableSource, bssDeclarations);
+            if (stepTwoComplete)
+            {
+                await JSRuntime.InvokeVoidAsync("objectiveCheck", "bssStepTwoCheckmark");
+                if (Section < 2)
+                {
+                    Section = 2;
+                    triggerLevelCompleted = true;
+                }
+            }
+        }
+
+        if (Section >= 2)
+        {
+            stepThreeComplete = string.Equals(Board.Serial1.serialText, ExpectedOrderedMessageText, StringComparison.Ordinal);
+            if (stepThreeComplete)
+            {
+                await JSRuntime.InvokeVoidAsync("objectiveCheck", "bssStepThreeCheckmark");
+                if (Section < 3)
+                {
+                    Section = 3;
+                }
+            }
+        }
+
+        await ProgressChanged.InvokeAsync((Section, stepTwoComplete, triggerLevelCompleted));
+    }
+
+    private static List<BssSpaceDeclaration> ParseBssSpaceDeclarations(string source)
+    {
+        List<BssSpaceDeclaration> declarations = new List<BssSpaceDeclaration>();
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            return declarations;
+        }
+
+        Segment currentSegment = Segment.Text;
+        string? pendingLabel = null;
+        string[] lines = source.Replace("\r", string.Empty).Split('\n');
+
+        foreach (string rawLine in lines)
+        {
+            string line = StripComments(rawLine);
+            string trimmed = line.Trim();
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                continue;
+            }
+
+            if (Regex.IsMatch(trimmed, @"^\.text\b", RegexOptions.IgnoreCase))
+            {
+                currentSegment = Segment.Text;
+                pendingLabel = null;
+                continue;
+            }
+
+            if (Regex.IsMatch(trimmed, @"^\.data\b", RegexOptions.IgnoreCase))
+            {
+                currentSegment = Segment.Data;
+                pendingLabel = null;
+                continue;
+            }
+
+            if (Regex.IsMatch(trimmed, @"^\.bss\b", RegexOptions.IgnoreCase))
+            {
+                currentSegment = Segment.Bss;
+                pendingLabel = null;
+                continue;
+            }
+
+            Match labelMatch = Regex.Match(trimmed, @"^([a-zA-Z_][a-zA-Z0-9_.]*):\s*(.*)$");
+            if (labelMatch.Success)
+            {
+                pendingLabel = labelMatch.Groups[1].Value;
+                trimmed = labelMatch.Groups[2].Value.Trim();
+
+                if (string.IsNullOrWhiteSpace(trimmed))
+                {
+                    continue;
+                }
+            }
+
+            if (currentSegment != Segment.Bss)
+            {
+                pendingLabel = null;
+                continue;
+            }
+
+            Match spaceMatch = Regex.Match(trimmed, @"^\.space\s+([^\s,]+)", RegexOptions.IgnoreCase);
+            if (!spaceMatch.Success)
+            {
+                pendingLabel = null;
+                continue;
+            }
+
+            if (pendingLabel == null)
+            {
+                continue;
+            }
+
+            if (!TryParseAssemblyNumber(spaceMatch.Groups[1].Value, out int spaceLength) || spaceLength <= 0)
+            {
+                continue;
+            }
+
+            declarations.Add(new BssSpaceDeclaration(pendingLabel, spaceLength));
+            pendingLabel = null;
+        }
+
+        return declarations;
+    }
+
+    private bool HasOrderedMessageInDeclaredBssBuffer(RexBoard board, string source, List<BssSpaceDeclaration> declarations)
+    {
+        if (declarations.Count == 0)
+        {
+            return false;
+        }
+
+        Dictionary<string, int> labelAddresses = BuildLabelAddresses(source);
+        foreach (BssSpaceDeclaration declaration in declarations)
+        {
+            if (declaration.SpaceLength < ExpectedOrderedMessageWords.Length)
+            {
+                continue;
+            }
+
+            if (!labelAddresses.TryGetValue(declaration.Label, out int startAddress))
+            {
+                continue;
+            }
+
+            if (startAddress < 0 || startAddress + ExpectedOrderedMessageWords.Length > board.RAM.mMemory.Length)
+            {
+                continue;
+            }
+
+            JSRuntime.InvokeVoidAsync("console.log", $"Checking .bss label '{declaration.Label}' at address {startAddress:X8} for ordered message.");
+
+            bool matches = true;
+            for (int i = 0; i < ExpectedOrderedMessageWords.Length; i++)
+            {
+                if (board.RAM.mMemory[startAddress + i] != ExpectedOrderedMessageWords[i])
+                {
+                    matches = false;
+                    break;
+                }
+            }
+
+            if (matches)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string BuildAnalyzableSource(string userCode)
+    {
+        if (string.IsNullOrWhiteSpace(userCode))
+        {
+            return string.Empty;
+        }
+
+        string source = userCode;
+
+        // GetUserCode() can return only the Blockly region; append fixed library segments
+        // so label addresses line up with the same assembled memory layout shown in RAM.
+        if (!source.Contains("main:", StringComparison.Ordinal))
+        {
+            source = string.Concat(Library?[0][1] ?? string.Empty, "\n", source);
+        }
+
+        if (!source.Contains("message:", StringComparison.Ordinal))
+        {
+            source = string.Concat(source, "\n", Library?[2][1] ?? string.Empty);
+        }
+
+        return source;
+    }
+
+    private static Dictionary<string, int> BuildLabelAddresses(string source)
+    {
+        Dictionary<string, int> labelAddresses = new Dictionary<string, int>(StringComparer.Ordinal);
+        Dictionary<string, SegmentedLabelAddress> segmentedLabelAddresses = new Dictionary<string, SegmentedLabelAddress>(StringComparer.Ordinal);
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            return labelAddresses;
+        }
+
+        int textWords = 0;
+        int dataWords = 0;
+        int bssWords = 0;
+
+        Segment currentSegment = Segment.Text;
+        string? pendingLabel = null;
+        string[] lines = source.Replace("\r", string.Empty).Split('\n');
+
+        foreach (string rawLine in lines)
+        {
+            string line = StripComments(rawLine);
+            string trimmed = line.Trim();
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                continue;
+            }
+
+            if (Regex.IsMatch(trimmed, @"^\.text\b", RegexOptions.IgnoreCase))
+            {
+                currentSegment = Segment.Text;
+                pendingLabel = null;
+                continue;
+            }
+
+            if (Regex.IsMatch(trimmed, @"^\.data\b", RegexOptions.IgnoreCase))
+            {
+                currentSegment = Segment.Data;
+                pendingLabel = null;
+                continue;
+            }
+
+            if (Regex.IsMatch(trimmed, @"^\.bss\b", RegexOptions.IgnoreCase))
+            {
+                currentSegment = Segment.Bss;
+                pendingLabel = null;
+                continue;
+            }
+
+            Match labelMatch = Regex.Match(trimmed, @"^([a-zA-Z_][a-zA-Z0-9_.]*):\s*(.*)$");
+            if (labelMatch.Success)
+            {
+                pendingLabel = labelMatch.Groups[1].Value;
+                trimmed = labelMatch.Groups[2].Value.Trim();
+
+                if (string.IsNullOrWhiteSpace(trimmed))
+                {
+                    continue;
+                }
+            }
+
+            int wordsProduced = GetWordsProducedForLine(trimmed, currentSegment);
+            if (wordsProduced <= 0)
+            {
+                continue;
+            }
+
+            if (pendingLabel != null && !segmentedLabelAddresses.ContainsKey(pendingLabel))
+            {
+                int segmentOffset = currentSegment switch
+                {
+                    Segment.Text => textWords,
+                    Segment.Data => dataWords,
+                    _ => bssWords
+                };
+
+                segmentedLabelAddresses[pendingLabel] = new SegmentedLabelAddress(currentSegment, segmentOffset);
+            }
+
+            switch (currentSegment)
+            {
+                case Segment.Text:
+                    textWords += wordsProduced;
+                    break;
+                case Segment.Data:
+                    dataWords += wordsProduced;
+                    break;
+                case Segment.Bss:
+                    bssWords += wordsProduced;
+                    break;
+            }
+
+            pendingLabel = null;
+        }
+
+        foreach ((string label, SegmentedLabelAddress segmentedAddress) in segmentedLabelAddresses)
+        {
+            labelAddresses[label] = segmentedAddress.ToAbsoluteAddress(textWords, dataWords);
+        }
+
+        return labelAddresses;
+    }
+
+    private static int GetWordsProducedForLine(string trimmedLine, Segment segment)
+    {
+        if (string.IsNullOrWhiteSpace(trimmedLine))
+        {
+            return 0;
+        }
+
+        if (trimmedLine.StartsWith(".global", StringComparison.OrdinalIgnoreCase)
+            || trimmedLine.StartsWith(".equ", StringComparison.OrdinalIgnoreCase))
+        {
+            return 0;
+        }
+
+        if (segment == Segment.Text)
+        {
+            return trimmedLine.StartsWith(".", StringComparison.Ordinal) ? 0 : 1;
+        }
+
+        if (Regex.IsMatch(trimmedLine, @"^\.word\b", RegexOptions.IgnoreCase))
+        {
+            string operands = Regex.Replace(trimmedLine, @"^\.word\s+", string.Empty, RegexOptions.IgnoreCase);
+            return operands.Split(',', StringSplitOptions.RemoveEmptyEntries).Length;
+        }
+
+        if (Regex.IsMatch(trimmedLine, @"^\.space\b", RegexOptions.IgnoreCase))
+        {
+            Match valueMatch = Regex.Match(trimmedLine, @"^\.space\s+([^\s,]+)", RegexOptions.IgnoreCase);
+            if (!valueMatch.Success)
+            {
+                return 0;
+            }
+
+            if (TryParseAssemblyNumber(valueMatch.Groups[1].Value, out int spaceWords))
+            {
+                return Math.Max(spaceWords, 0);
+            }
+
+            return 0;
+        }
+
+        Match asciizMatch = Regex.Match(trimmedLine, @"^\.asciiz\s+""(.*)""$", RegexOptions.IgnoreCase);
+        if (asciizMatch.Success)
+        {
+            return asciizMatch.Groups[1].Value.Length + 1;
+        }
+
+        Match asciiMatch = Regex.Match(trimmedLine, @"^\.ascii\s+""(.*)""$", RegexOptions.IgnoreCase);
+        if (asciiMatch.Success)
+        {
+            return asciiMatch.Groups[1].Value.Length;
+        }
+
+        return trimmedLine.StartsWith(".", StringComparison.Ordinal) ? 0 : 1;
+    }
+
+    private static bool TryParseAssemblyNumber(string token, out int value)
+    {
+        value = 0;
+        string cleaned = token.Trim();
+
+        if (cleaned.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        {
+            return int.TryParse(cleaned[2..], NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out value);
+        }
+
+        return int.TryParse(cleaned, NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
+    }
+
+    private static string StripComments(string line)
+    {
+        int commentIndex = line.IndexOf('#');
+        return commentIndex >= 0 ? line[..commentIndex] : line;
+    }
+
+    private enum Segment
+    {
+        Text,
+        Data,
+        Bss
+    }
+
+    private sealed record SegmentedLabelAddress(Segment Segment, int SegmentOffset)
+    {
+        public int ToAbsoluteAddress(int textWords, int dataWords)
+        {
+            return Segment switch
+            {
+                Segment.Text => SegmentOffset,
+                Segment.Data => textWords + SegmentOffset,
+                _ => textWords + dataWords + SegmentOffset
+            };
+        }
+    }
+
+    private sealed record BssSpaceDeclaration(string Label, int SpaceLength);
 	}
-}
+

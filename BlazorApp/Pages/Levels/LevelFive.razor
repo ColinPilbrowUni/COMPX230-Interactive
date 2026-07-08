@@ -96,9 +96,9 @@
 			: (stringsUnlockedOrVisited ? ChecklistStepStatus.Started : ChecklistStepStatus.Incomplete);
 
 		bool bssUnlockedOrVisited = bssSection > 0 || stringsSection >= 3 || gateway.CurrentPartIndex >= 2;
-		ChecklistStepStatus bssStatus = bssUnlockedOrVisited
-			? ChecklistStepStatus.Started
-			: ChecklistStepStatus.Incomplete;
+		ChecklistStepStatus bssStatus = bssSection >= 2
+			? ChecklistStepStatus.Complete
+			: (bssUnlockedOrVisited ? ChecklistStepStatus.Started : ChecklistStepStatus.Incomplete);
 
 		gateway.SetPartStatusWithoutDowngrade(ChecklistState, 0, dataStatus);
 		gateway.SetPartStatusWithoutDowngrade(ChecklistState, 1, stringsStatus);
@@ -148,7 +148,7 @@
 			return status == ChecklistStepStatus.Complete ? Math.Max(lc.Section, 3) : lc.Section;
 		}
 
-		return lc.Section;
+		return status == ChecklistStepStatus.Complete ? Math.Max(lc.Section, 2) : lc.Section;
 	}
 
 	private async Task ApplyCurrentPartConfig()
@@ -254,7 +254,7 @@
 
 		gateway.SetPartStatusWithoutDowngrade(ChecklistState, 0, ChecklistStepStatus.Complete);
 		gateway.SetPartStatusWithoutDowngrade(ChecklistState, 1, ChecklistStepStatus.Complete);
-		gateway.SetPartStatusWithoutDowngrade(ChecklistState, 2, ChecklistStepStatus.Started);
+		gateway.SetPartStatusWithoutDowngrade(ChecklistState, 2, lc.Section >= 2 ? ChecklistStepStatus.Complete : ChecklistStepStatus.Started);
 		ChecklistState.SetSelectedStepIndex(gateway.LevelId, 2);
 	}
 
@@ -294,7 +294,7 @@
 		}
 		else
 		{
-			<Bss @ref="bssPartRef" Section="@lc.Section" ProgressChanged="HandlePartProgressChanged" />
+			<Bss @ref="bssPartRef" Section="@lc.Section" Board="board" LevelComponents="lc" ProgressChanged="HandlePartProgressChanged" />
 		}
 	</div>;
 
