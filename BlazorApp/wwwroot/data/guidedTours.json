@@ -18,27 +18,15 @@
     },
     {
       "elementKey": "resetWorkspace",
-      "description": "Reset the Blockly workspace back to its starting state."
+      "description": "Reset the Blockly workspace back to its starting state for this level."
     },
     {
       "elementKey": "compileButton",
-      "description": "Compile your Blockly program so it can run in WRAMP."
+      "description": "Compile your Blockly program so it can run in WRAMP. This will allow you to run and step through your program."
     },
     {
       "elementKey": "downloadCodeButton",
       "description": "Download the Blockly program as WRAMP code."
-    },
-    {
-      "elementKey": "undoButton",
-      "description": "Undo the last instruction executed in your program."
-    },
-    {
-      "elementKey": "runButton",
-      "description": "Run the program continuously from the current state."
-    },
-    {
-      "elementKey": "stepButton",
-      "description": "Step through the program one instruction at a time."
     }
   ],
   "parallelRegistersHighlight":[

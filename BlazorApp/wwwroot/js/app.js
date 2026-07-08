@@ -258,9 +258,20 @@ window.getScopedProgress = (scopeID, type) =>
 }
 
 var popover;
+var compilePopoverEnabled = true;
+
+window.setCompilePopoverEnabled = (enabled) =>
+{
+    compilePopoverEnabled = !!enabled;
+}
 
 window.triggerPopover = (error) =>
 {
+    if (!compilePopoverEnabled)
+    {
+        return;
+    }
+
     //Clear any existing popovers
     clearPopovers();
 

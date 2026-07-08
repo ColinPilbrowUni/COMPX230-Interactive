@@ -18,11 +18,11 @@
         <button type="button" class="btn btn-info" @onclick="saveCode" @ref="downloadCodeButtonRef">Download Code</button>
     </div>
 
-    <div class="btn-group" role="group" aria-label="WRAMP Controls">
+    <div class="btn-group" role="group" aria-label="WRAMP Controls" hidden="@(!firstCompilation)">
         <button type="button" class="btn btn-warning" @onclick="Undo" disabled="@(pcStates.Count == 0)" @ref="undoButtonRef">&lt;-- Undo</button>
-        <button type="button" class="btn btn-success" @onclick="Run" disabled="@(!firstCompilation)" hidden="@running" @ref="runButtonRef">Run</button>
+        <button type="button" class="btn btn-success" @onclick="Run" hidden="@running" @ref="runButtonRef">Run</button>
         <button type="button" class="btn btn-success" @onclick="Pause" hidden="@(!running)" @ref="pauseButtonRef">Pause</button>
-        <button type="button" class="btn btn-info" @onclick="Step" disabled="@(!firstCompilation || running || (board.CPU.InterruptStatus & (uint)0xF000) != 0)" @ref="stepButtonRef">Step --&gt;</button>
+        <button type="button" class="btn btn-info" @onclick="Step" disabled="@(running || (board.CPU.InterruptStatus & (uint)0xF000) != 0)" @ref="stepButtonRef">Step --&gt;</button>
     </div>
 </div>
 
@@ -337,6 +337,8 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        await JSRuntime.InvokeVoidAsync("setCompilePopoverEnabled", firstCompilation);
+
         // Always re-register tab refs so they stay current when UIComponents changes
         // between renders (e.g. LevelFour phase transition adding new tabs).
         if (WSIMInstructions != null) SpotlightRegistry.Register("instructionsTab", instructionsTabRef);
@@ -408,6 +410,7 @@
 
         //Reset board
         Reset();
+        await JSRuntime.InvokeVoidAsync("setCompilePopoverEnabled", firstCompilation);
 
         byte[] codeBytes;
         string combinedCode;
@@ -486,6 +489,7 @@
             {
                 instructionsLoaded = true;
                 firstCompilation = true;
+                await JSRuntime.InvokeVoidAsync("setCompilePopoverEnabled", firstCompilation);
                 codeCompiled = true;
                 if (UIComponents.Blockly)
                 {
