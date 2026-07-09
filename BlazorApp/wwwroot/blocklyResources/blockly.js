@@ -1038,15 +1038,39 @@ window.saveWorkspace = () =>
 
 window.loadWorkspace = (workspaceJSON) =>
 {
-    Blockly.serialization.workspaces.load(JSON.parse(workspaceJSON), workspace);
-    updateCode(Blockly.Events.BLOCK_CREATE);
+    if (workspaceJSON == null || workspaceJSON.trim() === "")
+    {
+        workspace.clear();
+        updateCode(Blockly.Events.BLOCK_CREATE);
+        return false;
+    }
+
+    try
+    {
+        Blockly.serialization.workspaces.load(JSON.parse(workspaceJSON), workspace);
+        updateCode(Blockly.Events.BLOCK_CREATE);
+        return true;
+    }
+    catch (e)
+    {
+        console.warn('Failed to load Blockly workspace JSON. Falling back to an empty workspace.', e);
+        workspace.clear();
+        updateCode(Blockly.Events.BLOCK_CREATE);
+        return false;
+    }
 }
 
 window.loadPresetWorkspace = (workspaceJSON) =>
 {
     presetWorkspace = workspaceJSON;
-    loadWorkspace(workspaceJSON);
-    presetCode = generateCode();
+    if (loadWorkspace(workspaceJSON))
+    {
+        presetCode = generateCode();
+    }
+    else
+    {
+        presetCode = '';
+    }
     localStorage.removeItem(blocklyStorage);
 }
 
@@ -1062,23 +1086,53 @@ window.loadSavedOrPresetWorkspace = (storageKey, workspaceJSON) =>
         blocklyStorage = storageKey;
     }
 
-    presetWorkspace = workspaceJSON;
+    let hasPresetWorkspace = workspaceJSON != null && workspaceJSON.trim() !== '';
+    presetWorkspace = hasPresetWorkspace ? workspaceJSON : null;
 
     // Keep presetCode anchored to the starter workspace so reset/save logic remains correct.
-    let presetCodeWorkspace = new Blockly.Workspace();
-    Blockly.serialization.workspaces.load(JSON.parse(workspaceJSON), presetCodeWorkspace);
-    presetCode = wrampGenerator.workspaceToCode(presetCodeWorkspace);
-    presetCodeWorkspace.dispose();
-
-    let savedWorkspace = localStorage.getItem(blocklyStorage);
-    if (savedWorkspace != null)
+    if (hasPresetWorkspace)
     {
-        loadWorkspace(savedWorkspace);
+        let presetCodeWorkspace = new Blockly.Workspace();
+        try
+        {
+            Blockly.serialization.workspaces.load(JSON.parse(workspaceJSON), presetCodeWorkspace);
+            presetCode = wrampGenerator.workspaceToCode(presetCodeWorkspace);
+        }
+        catch (e)
+        {
+            console.warn('Invalid preset workspace JSON. Falling back to empty workspace.', e);
+            presetWorkspace = null;
+            presetCode = '';
+        }
+        finally
+        {
+            presetCodeWorkspace.dispose();
+        }
     }
     else
     {
-        loadWorkspace(workspaceJSON);
+        presetCode = '';
     }
+
+    let savedWorkspace = localStorage.getItem(blocklyStorage);
+    if (savedWorkspace != null && loadWorkspace(savedWorkspace))
+    {
+        return;
+    }
+
+    // Remove invalid saved data so it doesn't keep causing parse failures.
+    if (savedWorkspace != null)
+    {
+        localStorage.removeItem(blocklyStorage);
+    }
+
+    if (hasPresetWorkspace && loadWorkspace(workspaceJSON))
+    {
+        return;
+    }
+
+    workspace.clear();
+    updateCode(Blockly.Events.BLOCK_CREATE);
 }
 
 window.updateToolbox = (toolbox) =>

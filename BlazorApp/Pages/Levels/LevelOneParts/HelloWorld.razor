@@ -1,0 +1,152 @@
+@inject IJSRuntime JSRuntime
+
+<section>
+    <h2>Hello World</h2>
+    <ul>
+        <li>On the right side of the screen is a simulator that is showing the internal RAM and LED display of a basys3 board.</li>
+        <li>Currently loaded into RAM is a WRAMP program that will display a message on the LEDs.</li>
+        <li>You can use the COMPILE button to get things started, then use the RUN and STEP buttons to simulate running this program.</li>
+        <li>What message is being displayed?</li>
+
+        <input id="inputOne" @oninput="OnInputMessageChanged" placeholder="Enter message" />
+        <label class="inputCheckmark" id="inputOneCheckmark" for="inputOne"><i class="bi bi-check-lg"></i></label>
+
+        @if (Section >= 1)
+        {
+            <li>That's right!</li>
+            <li>This simulation is slow so that you can see each SSD update individually.</li>
+            <li>On the real board, you need to include an artifial delay to make it human readable.</li>
+            <li>If you're interested, try switching to the RAM tab to see the program running.</li>
+            <li>Can you find where the message is stored?</li>
+            <li>What address in RAM is the letter 'H' stored in?</li>
+
+            <input id="inputTwo" @oninput="OnInputAddressChanged" placeholder="Enter address" />
+            <label class="inputCheckmark" id="inputTwoCheckmark" for="inputTwo"><i class="bi bi-check-lg"></i></label>
+        }
+
+        @if (Section >= 2)
+        {
+            <li>Correct!</li>
+            <li>The 'Disassembly' column shows the WRAMP instruction that is disassembled from the value 0x00000076.</li>
+            <li>Because everything is just made of 0s and 1s, the same number that represents 'H' may also be an 'add' instruction!</li>
+            <li>Introduction is complete.</li>
+        }
+    </ul>
+</section>
+
+@code {
+    public static readonly LevelGroupPart GroupPart = new("helloWorld", "Hello World", ProgressScopeId);
+
+    public const string ProgressScopeId = "levelOneHelloWorld";
+    public const string BlocklyStorageKey = "levelOneHelloWorldBlockly";
+
+    public static UIComponents Components { get; } = new(GPRegisters: true, SSDs: true, ParallelRegisters: true, RAM: true);
+
+    public static Toolbox Toolbox { get; } = new()
+    {
+        contents = new List<Category>()
+    };
+
+    public static string StartingWorkspace { get; } = "";
+
+    public static string? MaxInstances => null;
+
+    public static string[][]? Library { get; } =
+    {
+        new string[] { "hello.s", """
+        .text                       #specifies that what follows are instructions
+        .global main                #specifies that the label "main" is globally accessible
+
+        main:                       #entry point into the program
+            sw $0, 0x73004($0)      #enable individual control of SSD segments
+            addi $2, $0, 0          #initialise loop counter to zero
+
+        loop:
+            seqi $8, $2, 12         #has the loop finished?
+            bnez $8, main           #if so, go to "main"
+            jal write               #write the pattern to the SSD
+            addi $2, $2, 1          #increment loop counter
+            j loop                  #go around again
+
+        write:
+            lw $1, 0x73007($0)      # transfer SSD contents to the left
+            sw $1, 0x73006($0)
+            lw $1, 0x73008($0)
+            sw $1, 0x73007($0)
+            lw $1, 0x73009($0)
+            sw $1, 0x73008($0)
+            lw $1, hello($2)        #load the new pattern to the rightmost SSD
+            sw $1, 0x73009($0)
+            jr $ra                  #return
+
+        .data                       #specifies that what follows are data with initial values
+        hello:
+            .word 0x76 #H
+            .word 0x79 #E
+            .word 0x38 #L
+            .word 0x38 #L
+            .word 0x3F #O
+            .word 0x00
+            .word 0x5B #2
+            .word 0x4F #3
+            .word 0x3F #0
+            .word 0x00
+            .word 0x00
+            .word 0x00
+        """ }
+    };
+
+    [Parameter]
+    public int Section { get; set; }
+
+    [Parameter]
+    public EventCallback<(int Section, bool StepComplete, bool TriggerLevelCompleted)> ProgressChanged { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Section >= 1)
+        {
+            _ = JSRuntime.InvokeVoidAsync("objectiveCheck", "inputOneCheckmark");
+        }
+
+        if (Section >= 2)
+        {
+            _ = JSRuntime.InvokeVoidAsync("objectiveCheck", "inputTwoCheckmark");
+        }
+    }
+
+    private async Task OnInputMessageChanged(ChangeEventArgs e)
+    {
+        string userInput = e.Value?.ToString() ?? string.Empty;
+        if (userInput.Trim().ToUpper() == "HELLO 230" || userInput.Trim().ToUpper() == "HELLO230")
+        {
+            if (Section == 0)
+            {
+                Section = 1;
+                await ProgressChanged.InvokeAsync((Section, false, false));
+            }
+
+            await JSRuntime.InvokeVoidAsync("objectiveCheck", "inputOneCheckmark");
+        }
+    }
+
+    private async Task OnInputAddressChanged(ChangeEventArgs e)
+    {
+        string userInput = e.Value?.ToString() ?? string.Empty;
+        if (userInput.Trim() == "10" || userInput.Trim() == "00000010" || userInput.Trim() == "0x00000010")
+        {
+            if (Section == 1)
+            {
+                Section = 2;
+                await ProgressChanged.InvokeAsync((Section, true, true));
+            }
+
+            await JSRuntime.InvokeVoidAsync("objectiveCheck", "inputTwoCheckmark");
+        }
+    }
+
+    public Task HandleBoardChanged()
+    {
+        return ProgressChanged.InvokeAsync((Section, Section >= 2, false));
+    }
+}

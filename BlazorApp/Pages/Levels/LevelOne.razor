@@ -1,254 +1,322 @@
 @page "/levelOne"
 @using RexSimulator.Hardware
-@using System.Text.Json
-
+@using BlazorApp.Pages.Levels.LevelOneParts
 @inject IJSRuntime JSRuntime
+@inject ChecklistStateStore ChecklistState
+@implements IDisposable
 
-<Level @ref="levelComponent" Title="Level One" BoardChanged="CheckBoard" Toolbox="@toolbox" maxInstances="@maxInstances" startingWorkspace="@startingWorkspace" UIComponents="@UIComponents" WSIMInstructions="@Instructions"/>
+<Level @ref="levelComponent" Title="Introduction" BoardChanged="HandleBoardChanged" UIComponents="@CurrentComponents" Toolbox="@CurrentToolbox" WSIMInstructions="@CurrentWSIMInstructions" MainInstructions="@CurrentMainInstructions" startingWorkspace="@CurrentStartingWorkspace" maxInstances="@CurrentMaxInstances" Library="@CurrentLibrary" />
 
 @code {
     public Level? levelComponent;
-    public LevelComponents lc = new LevelComponents();
-    required public WSIM WSIM;
-    required public RexBoard board;
+    public LevelComponents lc = new();
+    public WSIM? WSIM;
+    public RexBoard? board;
 
-     protected override async Task OnAfterRenderAsync(bool firstRender)
+    private QuickTour? quickTourPartRef;
+    private Welcome? welcomePartRef;
+    private HelloWorld? helloWorldPartRef;
+    private LevelGroupGateway gateway = default!;
+
+    private UIComponents CurrentComponents => gateway.CurrentPartIndex switch
     {
-        if (firstRender)
-        {
-            if (levelComponent != null && levelComponent.wsimComponent != null)
-            {
-                board = levelComponent.wsimComponent.board;
-                WSIM = levelComponent.wsimComponent;
-            }
+        0 => QuickTour.Components,
+        1 => Welcome.Components,
+        _ => HelloWorld.Components
+    };
 
-            lc.SetJSRuntime(JSRuntime);
+    private Toolbox CurrentToolbox => gateway.CurrentPartIndex switch
+    {
+        0 => QuickTour.Toolbox,
+        1 => Welcome.Toolbox,
+        _ => HelloWorld.Toolbox
+    };
+
+    private string CurrentStartingWorkspace => gateway.CurrentPartIndex switch
+    {
+        0 => QuickTour.StartingWorkspace,
+        1 => Welcome.StartingWorkspace,
+        _ => HelloWorld.StartingWorkspace
+    };
+
+    private string? CurrentMaxInstances => gateway.CurrentPartIndex switch
+    {
+        0 => QuickTour.MaxInstances,
+        1 => Welcome.MaxInstances,
+        _ => HelloWorld.MaxInstances
+    };
+
+    private string[][]? CurrentLibrary => gateway.CurrentPartIndex switch
+    {
+        0 => QuickTour.Library,
+        1 => Welcome.Library,
+        _ => HelloWorld.Library
+    };
+
+    private RenderFragment? CurrentWSIMInstructions => gateway.CurrentPartIndex switch
+    {
+        2 => null,
+        _ => Instructions
+    };
+
+    private RenderFragment? CurrentMainInstructions => gateway.CurrentPartIndex switch
+    {
+        2 => Instructions,
+        _ => null
+    };
+
+    protected override void OnInitialized()
+    {
+        gateway = new LevelGroupGateway("levelOne", new[] { QuickTour.GroupPart, Welcome.GroupPart, HelloWorld.GroupPart });
+        ChecklistState.SectionSelectionRequested += HandleSectionSelectionRequested;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        if (levelComponent != null && levelComponent.wsimComponent != null)
+        {
+            board = levelComponent.wsimComponent.board;
+            WSIM = levelComponent.wsimComponent;
+        }
+
+        lc.SetJSRuntime(JSRuntime);
+        await gateway.InitializeAsync(JSRuntime, ChecklistState);
+        await SyncChecklistStateFromStoredProgress();
+        await ApplyCurrentPartConfig();
+        await HandleBoardChanged();
+        StateHasChanged();
+    }
+
+    private async Task SyncChecklistStateFromStoredProgress()
+    {
+        int quickTourSection = await JSRuntime.InvokeAsync<int>("getScopedProgress", QuickTour.ProgressScopeId, "Section");
+        int welcomeSection = await JSRuntime.InvokeAsync<int>("getScopedProgress", Welcome.ProgressScopeId, "Section");
+        int helloWorldSection = await JSRuntime.InvokeAsync<int>("getScopedProgress", HelloWorld.ProgressScopeId, "Section");
+
+        ChecklistStepStatus quickTourStatus = quickTourSection >= 3
+            ? ChecklistStepStatus.Complete
+            : ChecklistStepStatus.Started;
+
+        bool welcomeUnlockedOrVisited = welcomeSection > 0 || quickTourSection >= 3 || gateway.CurrentPartIndex >= 1;
+        ChecklistStepStatus welcomeStatus = welcomeSection >= 6
+            ? ChecklistStepStatus.Complete
+            : (welcomeUnlockedOrVisited ? ChecklistStepStatus.Started : ChecklistStepStatus.Incomplete);
+
+        bool helloWorldUnlockedOrVisited = helloWorldSection > 0 || welcomeSection >= 6 || gateway.CurrentPartIndex >= 2;
+        ChecklistStepStatus helloWorldStatus = helloWorldSection >= 2
+            ? ChecklistStepStatus.Complete
+            : (helloWorldUnlockedOrVisited ? ChecklistStepStatus.Started : ChecklistStepStatus.Incomplete);
+
+        gateway.SetPartStatusWithoutDowngrade(ChecklistState, 0, quickTourStatus);
+        gateway.SetPartStatusWithoutDowngrade(ChecklistState, 1, welcomeStatus);
+        gateway.SetPartStatusWithoutDowngrade(ChecklistState, 2, helloWorldStatus);
+    }
+
+    private void HandleSectionSelectionRequested(string levelId, int stepIndex, ChecklistStepStatus status)
+    {
+        if (!string.Equals(levelId, gateway.LevelId, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            await ApplyChecklistSectionSelection(stepIndex, status);
+        });
+    }
+
+    private async Task ApplyChecklistSectionSelection(int stepIndex, ChecklistStepStatus status)
+    {
+        if (!gateway.IsValidIndex(stepIndex))
+        {
+            return;
+        }
+
+        await gateway.SelectPartAsync(stepIndex, JSRuntime, ChecklistState);
+        await ApplyCurrentPartConfig();
+
+        lc.Section = GetSectionFromChecklistSelection(status);
+
+        StateHasChanged();
+        await Task.Yield();
+        await HandleBoardChanged();
+        StateHasChanged();
+    }
+
+    private int GetSectionFromChecklistSelection(ChecklistStepStatus status)
+    {
+        if (status == ChecklistStepStatus.Complete)
+        {
+            return gateway.CurrentPartIndex switch
+            {
+                0 => 3,
+                1 => 6,
+                _ => 2
+            };
+        }
+
+        return gateway.CurrentPartIndex switch
+        {
+            0 => Math.Clamp(lc.Section, 0, 2),
+            1 => Math.Clamp(lc.Section, 0, 5),
+            _ => Math.Clamp(lc.Section, 0, 1)
+        };
+    }
+
+    private async Task ApplyCurrentPartConfig()
+    {
+        if (gateway.CurrentPartIndex == 0)
+        {
+            lc.SetProgressScope(QuickTour.ProgressScopeId);
             await lc.getProgress();
+            if (QuickTour.Components.Blockly)
+            {
+                await lc.UpdateToolbox(QuickTour.Toolbox);
+                await JSRuntime.InvokeVoidAsync("loadSavedOrPresetWorkspace", QuickTour.BlocklyStorageKey, QuickTour.StartingWorkspace);
+            }
+        }
+        else if (gateway.CurrentPartIndex == 1)
+        {
+            lc.SetProgressScope(Welcome.ProgressScopeId);
+            await lc.getProgress();
+            if (Welcome.Components.Blockly)
+            {
+                await lc.UpdateToolbox(Welcome.Toolbox);
+                await JSRuntime.InvokeVoidAsync("loadSavedOrPresetWorkspace", Welcome.BlocklyStorageKey, Welcome.StartingWorkspace);
+            }
+        }
+        else
+        {
+            lc.SetProgressScope(HelloWorld.ProgressScopeId);
+            await lc.getProgress();
+            if (HelloWorld.Components.Blockly)
+            {
+                await lc.UpdateToolbox(HelloWorld.Toolbox);
+                await JSRuntime.InvokeVoidAsync("loadSavedOrPresetWorkspace", HelloWorld.BlocklyStorageKey, HelloWorld.StartingWorkspace);
+            }
+        }
+
+        ChecklistState.SetSelectedStepIndex(gateway.LevelId, gateway.CurrentPartIndex);
+        SyncChecklistState();
+    }
+
+    public async Task HandleBoardChanged()
+    {
+        if (levelComponent == null || levelComponent.wsimComponent == null)
+        {
+            return;
+        }
+
+        if (gateway.CurrentPartIndex == 0)
+        {
+            if (quickTourPartRef != null)
+            {
+                await quickTourPartRef.HandleBoardChanged();
+            }
+        }
+        else if (gateway.CurrentPartIndex == 1)
+        {
+            if (welcomePartRef != null)
+            {
+                await welcomePartRef.HandleBoardChanged();
+            }
+        }
+        else
+        {
+            if (helloWorldPartRef != null)
+            {
+                await helloWorldPartRef.HandleBoardChanged();
+            }
+        }
+    }
+
+    private Task HandlePartProgressChanged((int Section, bool StepComplete, bool TriggerLevelCompleted) progress)
+    {
+        lc.Section = progress.Section;
+
+        if (progress.TriggerLevelCompleted)
+        {
+            lc.LevelCompleted();
+        }
+
+        SyncChecklistState();
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private void SyncChecklistState()
+    {
+        if (gateway.CurrentPartIndex == 0)
+        {
+            gateway.SetPartStatusWithoutDowngrade(ChecklistState, 0, lc.Section >= 3 ? ChecklistStepStatus.Complete : ChecklistStepStatus.Started);
+            gateway.SetPartStatusWithoutDowngrade(ChecklistState, 1, ChecklistStepStatus.Incomplete);
+            gateway.SetPartStatusWithoutDowngrade(ChecklistState, 2, ChecklistStepStatus.Incomplete);
+            ChecklistState.SetSelectedStepIndex(gateway.LevelId, 0);
+            return;
+        }
+
+        if (gateway.CurrentPartIndex == 1)
+        {
+            gateway.SetPartStatusWithoutDowngrade(ChecklistState, 0, ChecklistStepStatus.Complete);
+            gateway.SetPartStatusWithoutDowngrade(ChecklistState, 1, lc.Section >= 6 ? ChecklistStepStatus.Complete : ChecklistStepStatus.Started);
+            gateway.SetPartStatusWithoutDowngrade(ChecklistState, 2, ChecklistStepStatus.Incomplete);
+            ChecklistState.SetSelectedStepIndex(gateway.LevelId, 1);
+            return;
+        }
+
+        gateway.SetPartStatusWithoutDowngrade(ChecklistState, 0, ChecklistStepStatus.Complete);
+        gateway.SetPartStatusWithoutDowngrade(ChecklistState, 1, ChecklistStepStatus.Complete);
+        gateway.SetPartStatusWithoutDowngrade(ChecklistState, 2, lc.Section >= 2 ? ChecklistStepStatus.Complete : ChecklistStepStatus.Started);
+        ChecklistState.SetSelectedStepIndex(gateway.LevelId, 2);
+    }
+
+    public async Task NextSection()
+    {
+        if (gateway.CurrentPartIndex == 0 && lc.Section >= 3)
+        {
+            await gateway.SelectPartAsync(1, JSRuntime, ChecklistState);
+            lc.UncheckAllObjectives();
+            await ApplyCurrentPartConfig();
+            StateHasChanged();
+            await Task.Yield();
+            await HandleBoardChanged();
+            StateHasChanged();
+        }
+        else if (gateway.CurrentPartIndex == 1 && lc.Section >= 6)
+        {
+            await gateway.SelectPartAsync(2, JSRuntime, ChecklistState);
+            lc.UncheckAllObjectives();
+            await ApplyCurrentPartConfig();
+            StateHasChanged();
+            await Task.Yield();
+            await HandleBoardChanged();
             StateHasChanged();
         }
     }
 
-    public UIComponents UIComponents = new UIComponents(Blockly: true, Code: true, SSDs: true, Switches: true, LEDs: true, GPRegisters: true, ParallelRegisters: true);
-
     public RenderFragment Instructions =>
     @<div>
-        <h1>Welcome!</h1>
-        <ul>
-            @if (lc.Section == 0)
-            {
-                <li>On the right side of the screen is a display showing the <GuidedWalkthrough ButtonText="Physical Components" TourKey="physicalComponentsHighlight" /> of the WRAMP board.</li>
-                <li>You can click on the switches and buttons to change the values stored in the <GuidedWalkthrough ButtonText="Parallel Registers" TourKey="parallelRegistersHighlight" /> tab.</li>
-                <li>Which memory address contains the value of the switches?</li>
-
-                <input id="inputOne" @oninput="OnInputChanged" placeholder="Enter address"/>
-                <Checkmark id="checkmarkOne" forInput="inputOne"/>
-            }
-
-            @if (lc.Section == 1)
-            {
-                <li>That's correct!</li>
-                <li>
-                    Next, can you toggle the switches such that this value has the decimal value 10?
-                    <Checkmark id="checkmarkTwo"/>
-                </li>
-            }
-
-            @if (lc.Section == 2)
-            {
-                <li> Now try dragging a jr block from the Branch tab!</li>
-            }
-
-            @if (lc.Section == 3)
-            {
-                <li> Great work! </li>
-                <li> Next, write some blockly code to light up the LEDs above the switches. </li>
-                <li> You can write a value to these using the sw (store word) instruction and using the memory address 0x7300A or the label par_led</li>
-                <li> Can you light up all the LEDs at once?</li>
-            }
-
-            @if (lc.Section == 4)
-            {
-                <li> Now, can you load the value from the switches and store it into the leds?</li>
-                <li> You'll need to use both the lw and sw instructions.</li>
-                <li> Note that you can't move the value directly from one address to another, you'll need to temporarily store it in a register.</li>
-                <table class="objectiveTable">
-                    <tr>
-                        <td>All switches enabled</td>
-                        <td><Checkmark id="checkmarkThree"/></td>
-                    </tr>
-                    <tr>
-                        <td>All LEDs lit up</td>
-                        <td><Checkmark id="checkmarkFour"/></td>
-                    </tr>
-                    <tr>
-                        <td>jr $ra used</td>
-                        <td><Checkmark id="checkmarkFive"/></td>
-                    </tr>
-                </table>
-            }
-
-            @if (lc.Section == 5)
-            {
-                <li> Finally, try making the far left SSD count from 1 to 10!</li>
-                <li> You may need to add a loop back to the start to have it continually update.</li>
-            }
-
-            @if (lc.Section == 6)
-            {
-                <li> Congrats, you did it! </li>
-                lc.LevelCompleted();
-            }
-        </ul>
+        @if (gateway.CurrentPartIndex == 0)
+        {
+            <QuickTour @ref="quickTourPartRef" Section="@lc.Section" NextSection="NextSection" WSIM="WSIM" LevelComponents="lc" ProgressChanged="HandlePartProgressChanged" />
+        }
+        else if (gateway.CurrentPartIndex == 1)
+        {
+            <Welcome @ref="welcomePartRef" Section="@lc.Section" NextSection="NextSection" WSIM="WSIM" Board="board" LevelComponents="lc" ProgressChanged="HandlePartProgressChanged" />
+        }
+        else
+        {
+            <HelloWorld @ref="helloWorldPartRef" Section="@lc.Section" ProgressChanged="HandlePartProgressChanged" />
+        }
     </div>;
 
-    public void OnInputChanged(ChangeEventArgs e)
+    public void Dispose()
     {
-        string userInput = e.Value?.ToString() ?? "";
-        if (userInput == "73000" || userInput == "00073000" || userInput == "0x73000")
-        {
-            if(lc.Section == 0) lc.Section++;
-            lc.CheckObjective(true, "checkmarkOne");
-        }
+        ChecklistState.SectionSelectionRequested -= HandleSectionSelectionRequested;
     }
-
-    public async void CheckBoard()
-    {
-        string code = await lc.GetUserCode();
-        if (lc.Section == 1)
-        {
-            if (WSIM.Verify(new BoardCheck(WRAMPComponents.Switches, 10)))
-            {
-                lc.CheckObjective(true, "checkmarkTwo");
-                lc.Section++;
-            }
-        }
-        if (lc.Section == 2)
-        {
-            if (code.Contains("jr $_")) lc.Section++;
-        }
-        if (lc.Section == 3)
-        {
-            if (WSIM.Verify(new BoardCheck(WRAMPComponents.LEDs, 4294967295)))
-            {
-                //Artificially set the Interrupt status back for the next step in case the user didn't add a jr $ra
-                if (!code.Contains("jr $ra"))
-                {
-                    if ((board.CPU.InterruptStatus & (uint)0xF000) == 0x1000 && WSIM.running == false)
-                    {
-                        board.CPU.InterruptStatus &= 0xEFFF;
-                        lc.Section++;
-                    }
-                }
-                else
-                {
-                    lc.Section++;
-                }
-            }
-        }
-        if (lc.Section == 4)
-        {
-            WSIM.UIComponents.GPRegisters = false;
-            await lc.UpdateToolbox(newToolbox);
-
-            bool stepOne = WSIM.Verify(new BoardCheck(WRAMPComponents.Switches, 65535));
-            bool stepTwo = WSIM.Verify(new BoardCheck(WRAMPComponents.LEDs, 65535)) || WSIM.Verify(new BoardCheck(WRAMPComponents.LEDs, 4294967295));
-            bool returned = board.CPU.PC == 0xFFFFF;
-
-            lc.CheckObjective(stepOne, "checkmarkThree");
-            lc.CheckObjective(stepTwo, "checkmarkFour");
-            lc.CheckObjective(returned, "checkmarkFive");
-
-            //If the user didn't use a jr $ra, reset all objectives.
-            if ((board.CPU.InterruptStatus & 0xF000) == 0x1000)
-            {
-                stepOne = stepTwo = returned = false;
-                lc.UncheckAllObjectives();
-            }
-
-            if (stepOne && stepTwo && returned)
-            {
-                lc.Section++;
-            }
-        }
-        if (lc.Section == 5)
-        {
-            if (WSIM.Verify(new BoardCheck(WRAMPComponents.LeftLeftSSD, 1, 10, 1)))
-            {
-                lc.Section++;
-            }
-        }
-        StateHasChanged();
-    }
-
-    public Toolbox toolbox = new Toolbox{
-        contents = new List<Category>() {
-            new Category {
-                name = "Sections",
-                categorystyle = "sectionCategory",
-                contents = new List<Block>() {
-                    new Block { type = "textHead" },
-                    new Block { type = "global" }
-                }
-            },
-            new Category {
-                name = "Branch",
-                categorystyle = "branchCategory",
-                contents = new List<Block>() {
-                    new Block { type = "label" },
-                    new Block { type = "jumpRegister" },
-                    new Block { type = "jump" }
-                }
-            },
-            new Category {
-                name = "Memory",
-                categorystyle = "memoryCategory",
-                contents = new List<Block>() {
-                    new Block { type = "storeWord" }
-                }
-            },
-            new Category {
-                name = "Arithmetic",
-                categorystyle = "arithmeticCategory",
-                contents = new List<Block>() {
-                    new Block { type = "arithmeticImmediate" }
-                }
-            }
-        }
-    };
-
-    public Toolbox newToolbox = new Toolbox{
-        contents = new List<Category>() {
-            new Category {
-                name = "Sections",
-                categorystyle = "sectionCategory",
-                contents = new List<Block>() {
-                    new Block { type = "textHead" },
-                    new Block { type = "global" }
-                }
-            },
-            new Category {
-                name = "Branch",
-                categorystyle = "branchCategory",
-                contents = new List<Block>() {
-                    new Block { type = "label" },
-                    new Block { type = "jumpRegister" },
-                    new Block { type = "jump" }
-                }
-            },
-            new Category {
-                name = "Memory",
-                categorystyle = "memoryCategory",
-                contents = new List<Block>() {
-                    new Block { type = "loadWord" },
-                    new Block { type = "storeWord" }
-                }
-            }
-        }
-    };
-
-    public string maxInstances = "{ 'textHead': 1}";
-
-    public string startingWorkspace = """
-    {"blocks":{"languageVersion":0,"blocks":[{"type":"textHead","id":"*4p.gQmetkk+!Wm1!!kx","x":117,"y":21,"fields":{"instruction":".text"},"next":{"block":{"type":"global","id":"(T)!t~zEEwtWUX]]#s?@","fields":{"instruction":".global main"},"next":{"block":{"type":"label","id":"90].4xui,q_T{DPyc5ch","fields":{"label":"main"},"next":{"block":{"type":"arithmeticImmediate","id":"[v;$]DeWKi[D[3[Bou,x","fields":{"instruction":"addi","register1":"$1","register2":"$0","immediate":"65535"},"next":{"block":{"type":"storeWord","id":"U^`Ur(!-VsJ`rKvr%Hb]","fields":{"instruction":"sw","register1":"$1","offset":"par_led","register2":"$0"},"next":{"block":{"type":"jumpRegister","id":"MztpJP^=1XLK+BY.ZFO=","fields":{"instruction":"jr","register":"$ra"}}}}}}}}}}}}]}}
-    """;
 }

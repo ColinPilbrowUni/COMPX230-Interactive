@@ -1,0 +1,196 @@
+@using RexSimulator.Hardware
+@inject IJSRuntime JSRuntime
+
+<section>
+    <h2>A Quick Tour</h2>
+    <ul>
+        @if (Section >= 0)
+        {
+            <li>Welcome! If this is your first time using the online WRAMP simulator, click <GuidedWalkthrough ButtonText="Introduction Tour" TourKey="introductionTour" /> for a tour!</li>
+            <li>On the left side of the screen is a blockly workspace.</li>
+            <li>You can click on the sections to find WRAMP code blocks, try adding a .text to the workspace.</li>
+            <li>This will be the start of your WRAMP code.</li>
+        }
+
+        @if (Section >= 1)
+        {
+            <li>Every WRAMP program needs a .text section and a "main" label that identifies the start of the program.<label class="inputCheckmark" id="checkmarkS1Main"><i class="bi bi-check-lg"></i></label></li>
+            <li>You should also make the main label be visible from the outside by adding <code>.global main</code><label class="inputCheckmark" id="checkmarkS1Global"><i class="bi bi-check-lg"></i></label></li>
+            <li>Finally, to successfully finish your program should jump return to the $ra return address.<label class="inputCheckmark" id="checkmarkS1JR"><i class="bi bi-check-lg"></i></label></li>
+        }
+
+        @if (Section >= 2)
+        {
+            <li>This will be the basic setup for all WRAMP programs. Try saving it now so you can reuse it later.</li>
+            <li>Finally, try to put the number 1 into register 1 using the addi block, then compile and run your code to see if it works properly.</li>
+            <table class="table objectiveTable">
+                <tr>
+                    <td>addi block added</td>
+                    <td><label class="inputCheckmark" id="checkmark2Addi"><i class="bi bi-check-lg"></i></label></td>
+                </tr>
+                <tr>
+                    <td>Program compiled and running</td>
+                    <td><label class="inputCheckmark" id="checkmark2Running"><i class="bi bi-check-lg"></i></label></td>
+                </tr>
+                <tr>
+                    <td>Register 1 contains value 1</td>
+                    <td><label class="inputCheckmark" id="checkmark2Register"><i class="bi bi-check-lg"></i></label></td>
+                </tr>
+            </table>
+        }
+
+        @if (Section >= 3)
+        {
+            <li>Great work. This sublevel is complete.</li>
+            <button class="btn btn-primary" @onclick="NextSection">Next Section</button>
+        }
+    </ul>
+</section>
+
+@if (Section < 3)
+{
+    <button class="btn btn-danger skip-level-button" type="button" @onclick="SkipLevelAsync">Skip Level</button>
+}
+
+@code {
+    public static readonly LevelGroupPart GroupPart = new("quickTour", "A Quick Tour", ProgressScopeId);
+
+    public const string ProgressScopeId = "levelOneQuickTour";
+    public const string BlocklyStorageKey = "levelOneQuickTourBlockly";
+
+    public static UIComponents Components { get; } = new(Blockly: true, Code: true, GPRegisters: true);
+
+    public static Toolbox Toolbox { get; } = new()
+    {
+        contents = new List<Category>() {
+            new Category {
+                name = "Sections",
+                categorystyle = "sectionCategory",
+                contents = new List<Block>() {
+                    new Block { type = "textHead" },
+                    new Block { type = "global" }
+                }
+            },
+            new Category {
+                name = "Branch",
+                categorystyle = "branchCategory",
+                contents = new List<Block>() {
+                    new Block { type = "label" },
+                    new Block { type = "jumpRegister" }
+                }
+            },
+            new Category {
+                name = "Arithmetic",
+                categorystyle = "arithmeticCategory",
+                contents = new List<Block>() {
+                    new Block { type = "arithmeticImmediate" }
+                }
+            }
+        }
+    };
+
+    public static string StartingWorkspace { get; } = "";
+
+    public static string? MaxInstances { get; } = "{ 'textHead': 1}";
+
+    public static string[][]? Library => null;
+
+    [Parameter]
+    public int Section { get; set; }
+
+    [Parameter]
+    public EventCallback NextSection { get; set; }
+
+    [Parameter]
+    public WSIM? WSIM { get; set; }
+
+    [Parameter]
+    public LevelComponents? LevelComponents { get; set; }
+
+    [Parameter]
+    public EventCallback<(int Section, bool StepComplete, bool TriggerLevelCompleted)> ProgressChanged { get; set; }
+
+    public async Task HandleBoardChanged()
+    {
+        if (LevelComponents == null || WSIM == null)
+        {
+            return;
+        }
+
+        string code = await LevelComponents.GetUserCode();
+
+        if (Section == 0)
+        {
+            if (code.Contains(".text"))
+            {
+                Section = 1;
+            }
+        }
+
+        if (Section == 1)
+        {
+            bool main = code.Contains("main:");
+            bool global = code.Contains(".global main");
+            bool returned = code.Contains("jr $ra");
+
+            LevelComponents.CheckObjective(main, "checkmarkS1Main");
+            LevelComponents.CheckObjective(global, "checkmarkS1Global");
+            LevelComponents.CheckObjective(returned, "checkmarkS1JR");
+
+            if (main && global && returned)
+            {
+                Section = 2;
+            }
+        }
+
+        if (Section == 2)
+        {
+            bool addi = code.Contains("addi");
+            bool running = WSIM.running;
+            bool register1 = WSIM.Verify(new BoardCheck(WRAMPComponents.GPRegisters, 1, 1));
+
+            LevelComponents.CheckObjective(addi, "checkmark2Addi");
+            LevelComponents.CheckObjective(register1, "checkmark2Register");
+            LevelComponents.CheckObjective(running, "checkmark2Running");
+
+            if (addi && running && register1)
+            {
+                Section = 3;
+            }
+        }
+
+        await ProgressChanged.InvokeAsync((Section, Section >= 3, false));
+    }
+
+    private async Task SkipLevelAsync()
+    {
+        bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to skip this level?");
+        if (!confirmed)
+        {
+            return;
+        }
+
+        Section = 3;
+
+        if (LevelComponents != null)
+        {
+            LevelComponents.CheckObjective(true, "checkmarkS1Main");
+            LevelComponents.CheckObjective(true, "checkmarkS1Global");
+            LevelComponents.CheckObjective(true, "checkmarkS1JR");
+            LevelComponents.CheckObjective(true, "checkmark2Addi");
+            LevelComponents.CheckObjective(true, "checkmark2Running");
+            LevelComponents.CheckObjective(true, "checkmark2Register");
+        }
+
+        await ProgressChanged.InvokeAsync((Section, true, true));
+    }
+}
+
+<style>
+.skip-level-button {
+    position: fixed;
+    right: 1.25rem;
+    bottom: 1.25rem;
+    z-index: 1050;
+}
+</style>

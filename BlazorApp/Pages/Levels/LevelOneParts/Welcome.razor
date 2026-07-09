@@ -1,0 +1,311 @@
+@using RexSimulator.Hardware
+@inject IJSRuntime JSRuntime
+
+<section>
+    <h2>Welcome!</h2>
+    <ul>
+        @if (Section == 0)
+        {
+            <li>On the right side of the screen is a display showing the <GuidedWalkthrough ButtonText="Physical Components" TourKey="physicalComponentsHighlight" /> of the WRAMP board.</li>
+            <li>You can click on the switches and buttons to change the values stored in the <GuidedWalkthrough ButtonText="Parallel Registers" TourKey="parallelRegistersHighlight" /> tab.</li>
+            <li>Which memory address contains the value of the switches?</li>
+
+            <input id="inputOne" @oninput="OnInputChanged" placeholder="Enter address" />
+            <Checkmark id="checkmarkOne" forInput="inputOne" />
+        }
+
+        @if (Section == 1)
+        {
+            <li>That's correct!</li>
+            <li>
+                Next, can you toggle the switches such that this value has the decimal value 10?
+                <Checkmark id="checkmarkTwo" />
+            </li>
+        }
+
+        @if (Section == 2)
+        {
+            <li>Now try dragging a jr block from the Branch tab!</li>
+        }
+
+        @if (Section == 3)
+        {
+            <li>Great work!</li>
+            <li>Next, write some blockly code to light up the LEDs above the switches.</li>
+            <li>You can write a value to these using the sw (store word) instruction and using the memory address 0x7300A or the label par_led</li>
+            <li>Can you light up all the LEDs at once?</li>
+        }
+
+        @if (Section == 4)
+        {
+            <li>Now, can you load the value from the switches and store it into the leds?</li>
+            <li>You'll need to use both the lw and sw instructions.</li>
+            <li>Note that you can't move the value directly from one address to another, you'll need to temporarily store it in a register.</li>
+            <table class="objectiveTable">
+                <tr>
+                    <td>All switches enabled</td>
+                    <td><Checkmark id="checkmarkThree" /></td>
+                </tr>
+                <tr>
+                    <td>All LEDs lit up</td>
+                    <td><Checkmark id="checkmarkFour" /></td>
+                </tr>
+                <tr>
+                    <td>jr $ra used</td>
+                    <td><Checkmark id="checkmarkFive" /></td>
+                </tr>
+            </table>
+        }
+
+        @if (Section == 5)
+        {
+            <li>Finally, try making the far left SSD count from 1 to 10!</li>
+            <li>You may need to add a loop back to the start to have it continually update.</li>
+        }
+
+        @if (Section >= 6)
+        {
+            <li>Congrats, this sublevel is complete.</li>
+            <button class="btn btn-primary" @onclick="NextSection">Next Section</button>
+        }
+    </ul>
+</section>
+
+@if (Section < 6)
+{
+    <button class="btn btn-danger skip-level-button" type="button" @onclick="SkipLevelAsync">Skip Level</button>
+}
+
+@code {
+    public static readonly LevelGroupPart GroupPart = new("welcome", "Welcome!", ProgressScopeId);
+
+    public const string ProgressScopeId = "levelOneWelcome";
+    public const string BlocklyStorageKey = "levelOneWelcomeBlockly";
+
+    public static UIComponents Components { get; } = new(Blockly: true, Code: true, SSDs: true, Switches: true, LEDs: true, GPRegisters: true, ParallelRegisters: true);
+
+    public static Toolbox Toolbox { get; } = new()
+    {
+        contents = new List<Category>() {
+            new Category {
+                name = "Sections",
+                categorystyle = "sectionCategory",
+                contents = new List<Block>() {
+                    new Block { type = "textHead" },
+                    new Block { type = "global" }
+                }
+            },
+            new Category {
+                name = "Branch",
+                categorystyle = "branchCategory",
+                contents = new List<Block>() {
+                    new Block { type = "label" },
+                    new Block { type = "jumpRegister" },
+                    new Block { type = "jump" }
+                }
+            },
+            new Category {
+                name = "Memory",
+                categorystyle = "memoryCategory",
+                contents = new List<Block>() {
+                    new Block { type = "storeWord" }
+                }
+            },
+            new Category {
+                name = "Arithmetic",
+                categorystyle = "arithmeticCategory",
+                contents = new List<Block>() {
+                    new Block { type = "arithmeticImmediate" }
+                }
+            }
+        }
+    };
+
+    public static Toolbox PartTwoToolbox { get; } = new()
+    {
+        contents = new List<Category>() {
+            new Category {
+                name = "Sections",
+                categorystyle = "sectionCategory",
+                contents = new List<Block>() {
+                    new Block { type = "textHead" },
+                    new Block { type = "global" }
+                }
+            },
+            new Category {
+                name = "Branch",
+                categorystyle = "branchCategory",
+                contents = new List<Block>() {
+                    new Block { type = "label" },
+                    new Block { type = "jumpRegister" },
+                    new Block { type = "jump" }
+                }
+            },
+            new Category {
+                name = "Memory",
+                categorystyle = "memoryCategory",
+                contents = new List<Block>() {
+                    new Block { type = "loadWord" },
+                    new Block { type = "storeWord" }
+                }
+            }
+        }
+    };
+
+    public static string? MaxInstances { get; } = "{ 'textHead': 1}";
+
+    public static string StartingWorkspace { get; } = """
+    {"blocks":{"languageVersion":0,"blocks":[{"type":"textHead","id":"*4p.gQmetkk+!Wm1!!kx","x":117,"y":21,"fields":{"instruction":".text"},"next":{"block":{"type":"global","id":"(T)!t~zEEwtWUX]]#s?@","fields":{"instruction":".global main"},"next":{"block":{"type":"label","id":"90].4xui,q_T{DPyc5ch","fields":{"label":"main"},"next":{"block":{"type":"arithmeticImmediate","id":"[v;$]DeWKi[D[3[Bou,x","fields":{"instruction":"addi","register1":"$1","register2":"$0","immediate":"65535"},"next":{"block":{"type":"storeWord","id":"U^`Ur(!-VsJ`rKvr%Hb]","fields":{"instruction":"sw","register1":"$1","offset":"par_led","register2":"$0"},"next":{"block":{"type":"jumpRegister","id":"MztpJP^=1XLK+BY.ZFO=","fields":{"instruction":"jr","register":"$ra"}}}}}}}}}}}}]}}
+    """;
+
+    public static string[][]? Library => null;
+
+    [Parameter]
+    public int Section { get; set; }
+
+    [Parameter]
+    public EventCallback NextSection { get; set; }
+
+    [Parameter]
+    public WSIM? WSIM { get; set; }
+
+    [Parameter]
+    public RexBoard? Board { get; set; }
+
+    [Parameter]
+    public LevelComponents? LevelComponents { get; set; }
+
+    [Parameter]
+    public EventCallback<(int Section, bool StepComplete, bool TriggerLevelCompleted)> ProgressChanged { get; set; }
+
+    private async Task OnInputChanged(ChangeEventArgs e)
+    {
+        string userInput = e.Value?.ToString() ?? string.Empty;
+        if (userInput == "73000" || userInput == "00073000" || userInput == "0x73000")
+        {
+            if (Section == 0)
+            {
+                Section = 1;
+            }
+
+            if (LevelComponents != null)
+            {
+                LevelComponents.CheckObjective(true, "checkmarkOne");
+            }
+
+            await ProgressChanged.InvokeAsync((Section, Section >= 6, false));
+        }
+    }
+
+    public async Task HandleBoardChanged()
+    {
+        if (WSIM == null || Board == null || LevelComponents == null)
+        {
+            return;
+        }
+
+        string code = await LevelComponents.GetUserCode();
+
+        if (Section == 1)
+        {
+            if (WSIM.Verify(new BoardCheck(WRAMPComponents.Switches, 10)))
+            {
+                LevelComponents.CheckObjective(true, "checkmarkTwo");
+                Section = 2;
+            }
+        }
+
+        if (Section == 2)
+        {
+            if (code.Contains("jr $_"))
+            {
+                Section = 3;
+            }
+        }
+
+        if (Section == 3)
+        {
+            if (WSIM.Verify(new BoardCheck(WRAMPComponents.LEDs, 4294967295)))
+            {
+                if (!code.Contains("jr $ra"))
+                {
+                    if ((Board.CPU.InterruptStatus & (uint)0xF000) == 0x1000 && WSIM.running == false)
+                    {
+                        Board.CPU.InterruptStatus &= 0xEFFF;
+                        Section = 4;
+                    }
+                }
+                else
+                {
+                    Section = 4;
+                }
+            }
+        }
+
+        if (Section == 4)
+        {
+            WSIM.UIComponents.GPRegisters = false;
+            await LevelComponents.UpdateToolbox(PartTwoToolbox);
+
+            bool stepOne = WSIM.Verify(new BoardCheck(WRAMPComponents.Switches, 65535));
+            bool stepTwo = WSIM.Verify(new BoardCheck(WRAMPComponents.LEDs, 65535)) || WSIM.Verify(new BoardCheck(WRAMPComponents.LEDs, 4294967295));
+            bool returned = Board.CPU.PC == 0xFFFFF;
+
+            LevelComponents.CheckObjective(stepOne, "checkmarkThree");
+            LevelComponents.CheckObjective(stepTwo, "checkmarkFour");
+            LevelComponents.CheckObjective(returned, "checkmarkFive");
+
+            if ((Board.CPU.InterruptStatus & 0xF000) == 0x1000)
+            {
+                stepOne = stepTwo = returned = false;
+                LevelComponents.UncheckAllObjectives();
+            }
+
+            if (stepOne && stepTwo && returned)
+            {
+                Section = 5;
+            }
+        }
+
+        if (Section == 5)
+        {
+            if (WSIM.Verify(new BoardCheck(WRAMPComponents.LeftLeftSSD, 1, 10, 1)))
+            {
+                Section = 6;
+            }
+        }
+
+        await ProgressChanged.InvokeAsync((Section, Section >= 6, false));
+    }
+
+    private async Task SkipLevelAsync()
+    {
+        bool confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to skip this level?");
+        if (!confirmed)
+        {
+            return;
+        }
+
+        Section = 6;
+
+        if (LevelComponents != null)
+        {
+            LevelComponents.CheckObjective(true, "checkmarkOne");
+            LevelComponents.CheckObjective(true, "checkmarkTwo");
+            LevelComponents.CheckObjective(true, "checkmarkThree");
+            LevelComponents.CheckObjective(true, "checkmarkFour");
+            LevelComponents.CheckObjective(true, "checkmarkFive");
+        }
+
+        await ProgressChanged.InvokeAsync((Section, true, true));
+    }
+}
+
+<style>
+.skip-level-button {
+    position: fixed;
+    right: 1.25rem;
+    bottom: 1.25rem;
+    z-index: 1050;
+}
+</style>
